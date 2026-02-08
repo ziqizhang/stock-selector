@@ -1,0 +1,8 @@
+.score-bar {
+    height: 24px;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+.badge-buy { background-color: #10b981; color: white; }
+.badge-hold { background-color: #f59e0b; color: white; }
+.badge-sell { background-color: #ef4444; color: white; }

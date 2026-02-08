@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS tickers (
+    symbol TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sector TEXT,
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL REFERENCES tickers(symbol) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    score REAL NOT NULL,
+    confidence TEXT NOT NULL,
+    narrative TEXT,
+    raw_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS syntheses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL REFERENCES tickers(symbol) ON DELETE CASCADE,
+    overall_score REAL NOT NULL,
+    recommendation TEXT NOT NULL,
+    narrative TEXT,
+    signal_scores TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS scrape_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    content TEXT,
+    fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_analyses_symbol ON analyses(symbol);
+CREATE INDEX IF NOT EXISTS idx_syntheses_symbol ON syntheses(symbol);
+CREATE INDEX IF NOT EXISTS idx_scrape_cache_url ON scrape_cache(url);

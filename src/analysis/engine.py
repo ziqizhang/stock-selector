@@ -1,0 +1,167 @@
+import json
+import logging
+from typing import AsyncGenerator
+from src.scrapers.yahoo import YahooFinanceScraper
+from src.scrapers.finviz import FinvizScraper
+from src.scrapers.openinsider import OpenInsiderScraper
+from src.scrapers.news import NewsScraper
+from src.scrapers.sector import SectorScraper
+from src.analysis.claude import ClaudeCLI
+from src.analysis import prompts
+from src.analysis.scoring import weighted_score, score_to_recommendation
+from src.db import Database
+from src.models import RefreshProgress
+
+logger = logging.getLogger(__name__)
+
+
+class AnalysisEngine:
+    def __init__(self, db: Database):
+        self.db = db
+        self.claude = ClaudeCLI()
+        self.yahoo = YahooFinanceScraper()
+        self.finviz = FinvizScraper()
+        self.openinsider = OpenInsiderScraper()
+        self.news = NewsScraper()
+        self.sector = SectorScraper()
+
+    async def analyze_ticker(self, symbol: str) -> AsyncGenerator[RefreshProgress, None]:
+        """Run full analysis for a ticker, yielding progress updates."""
+        ticker = await self.db.get_ticker(symbol)
+        if not ticker:
+            yield RefreshProgress(symbol=symbol, step="error", done=True)
+            return
+
+        sector = ticker.get("sector")
+        all_scraped = {}
+        signal_results = {}
+
+        # 1. Scrape fundamentals + analyst from Yahoo
+        yield RefreshProgress(symbol=symbol, step="Scraping Yahoo Finance...", category="fundamentals")
+        try:
+            yahoo_data = await self.yahoo.scrape(symbol)
+            all_scraped["yahoo"] = yahoo_data
+        except Exception as e:
+            logger.error(f"Yahoo scrape failed for {symbol}: {e}")
+            yahoo_data = {"fundamentals": {}, "analyst": {}}
+            all_scraped["yahoo"] = yahoo_data
+
+        # 2. Scrape technicals + news from Finviz
+        yield RefreshProgress(symbol=symbol, step="Scraping Finviz...", category="technicals")
+        try:
+            finviz_data = await self.finviz.scrape(symbol)
+            all_scraped["finviz"] = finviz_data
+        except Exception as e:
+            logger.error(f"Finviz scrape failed for {symbol}: {e}")
+            finviz_data = {"technicals": {}, "news": []}
+            all_scraped["finviz"] = finviz_data
+
+        # 3. Scrape insider activity
+        yield RefreshProgress(symbol=symbol, step="Scraping OpenInsider...", category="insider_activity")
+        try:
+            insider_data = await self.openinsider.scrape(symbol)
+            all_scraped["openinsider"] = insider_data
+        except Exception as e:
+            logger.error(f"OpenInsider scrape failed for {symbol}: {e}")
+            insider_data = {"insider_trades": []}
+            all_scraped["openinsider"] = insider_data
+
+        # 4. Scrape news
+        yield RefreshProgress(symbol=symbol, step="Scraping news...", category="sentiment")
+        try:
+            news_data = await self.news.scrape(symbol)
+            all_scraped["news"] = news_data
+        except Exception as e:
+            logger.error(f"News scrape failed for {symbol}: {e}")
+            news_data = {"news_articles": []}
+            all_scraped["news"] = news_data
+
+        # 5. Scrape sector context
+        yield RefreshProgress(symbol=symbol, step="Scraping sector data...", category="sector_context")
+        try:
+            sector_data = await self.sector.scrape(symbol, sector)
+            all_scraped["sector"] = sector_data
+        except Exception as e:
+            logger.error(f"Sector scrape failed for {symbol}: {e}")
+            sector_data = {"sector_performance": [], "sector_news": []}
+            all_scraped["sector"] = sector_data
+
+        # 6. LLM Analysis — one per signal category
+        categories = [
+            ("fundamentals", prompts.fundamentals_prompt, yahoo_data.get("fundamentals", {})),
+            ("analyst_consensus", prompts.analyst_prompt, yahoo_data.get("analyst", {})),
+            ("insider_activity", prompts.insider_prompt, insider_data),
+            ("technicals", prompts.technicals_prompt, finviz_data.get("technicals", {})),
+            ("sentiment", prompts.sentiment_prompt, {**news_data, **finviz_data.get("news", {})}),
+        ]
+
+        for category, prompt_fn, data in categories:
+            yield RefreshProgress(symbol=symbol, step=f"Analyzing {category}...", category=category)
+            prompt = prompt_fn(symbol, data)
+            result = await self.claude.analyze(prompt)
+            score = result.get("score", 0)
+            confidence = result.get("confidence", "low")
+            narrative = result.get("narrative", "Analysis unavailable.")
+            signal_results[category] = {"score": score, "confidence": confidence, "narrative": narrative}
+            await self.db.save_analysis(
+                symbol=symbol, category=category, score=score,
+                confidence=confidence, narrative=narrative,
+                raw_data=json.dumps(data, default=str),
+            )
+
+        # Sector context (needs sector param)
+        yield RefreshProgress(symbol=symbol, step="Analyzing sector context...", category="sector_context")
+        sector_prompt = prompts.sector_prompt(symbol, sector or "Unknown", sector_data)
+        result = await self.claude.analyze(sector_prompt)
+        signal_results["sector_context"] = {
+            "score": result.get("score", 0),
+            "confidence": result.get("confidence", "low"),
+            "narrative": result.get("narrative", ""),
+        }
+        await self.db.save_analysis(
+            symbol=symbol, category="sector_context",
+            score=result.get("score", 0), confidence=result.get("confidence", "low"),
+            narrative=result.get("narrative", ""), raw_data=json.dumps(sector_data, default=str),
+        )
+
+        # Risk assessment
+        yield RefreshProgress(symbol=symbol, step="Analyzing risk...", category="risk_assessment")
+        risk_prompt_text = prompts.risk_prompt(symbol, all_scraped)
+        result = await self.claude.analyze(risk_prompt_text)
+        signal_results["risk_assessment"] = {
+            "score": result.get("score", 0),
+            "confidence": result.get("confidence", "low"),
+            "narrative": result.get("narrative", ""),
+            "bull_case": result.get("bull_case", ""),
+            "bear_case": result.get("bear_case", ""),
+        }
+        await self.db.save_analysis(
+            symbol=symbol, category="risk_assessment",
+            score=result.get("score", 0), confidence=result.get("confidence", "low"),
+            narrative=result.get("narrative", ""), raw_data=json.dumps(all_scraped, default=str),
+        )
+
+        # 7. Synthesis
+        yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)
+        synthesis_prompt = prompts.synthesis_prompt(symbol, signal_results)
+        synthesis = await self.claude.analyze(synthesis_prompt)
+        overall_score = synthesis.get("overall_score", weighted_score(
+            {k: v["score"] for k, v in signal_results.items()}
+        ))
+        recommendation = synthesis.get("recommendation", score_to_recommendation(overall_score))
+        await self.db.save_synthesis(
+            symbol=symbol,
+            overall_score=overall_score,
+            recommendation=recommendation,
+            narrative=synthesis.get("narrative", ""),
+            signal_scores=json.dumps({k: v["score"] for k, v in signal_results.items()}),
+        )
+
+        yield RefreshProgress(symbol=symbol, step="Complete", done=True)
+
+    async def close(self):
+        await self.yahoo.close()
+        await self.finviz.close()
+        await self.openinsider.close()
+        await self.news.close()
+        await self.sector.close()
