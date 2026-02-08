@@ -1,6 +1,6 @@
 # Stock Selector
 
-A personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Claude Code CLI for AI-powered analysis and scoring.
+A personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Codex CLI (default) or Claude Code CLI for AI-powered analysis and scoring.
 
 ## Features
 
@@ -13,7 +13,7 @@ A personal stock tracker and analysis dashboard that helps decide whether to buy
   - Sentiment & news (recent news tone, event significance)
   - Sector context (sector-relative performance, rotation trends)
   - Risk assessment (bull/bear case, volatility)
-- **AI-powered synthesis** — Claude analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
+- **AI-powered synthesis** — Codex (default) or Claude analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
 - **Score history** — Historical analyses are stored so you can track score changes over time
 - **Real-time progress** — WebSocket-based streaming shows scraping and analysis progress as it happens
 - **Staleness alerts** — On startup, the app prompts to refresh if any analysis data is older than 24 hours
@@ -33,7 +33,7 @@ All data is obtained via web scraping (no API keys required):
 ## Prerequisites
 
 - **Python 3.10+**
-- **Claude Code CLI** — installed and authenticated via a Max subscription. The app calls `claude --print -p "<prompt>"` to run LLM analysis. Install from [claude.ai/download](https://claude.ai/download)
+- **Codex CLI** (default) or **Claude Code CLI** — for LLM analysis. By default the app calls `codex exec` (configurable) to run prompts. Claude CLI is also supported via `STOCK_SELECTOR_LLM=claude`.
 
 ## Setup
 
@@ -79,7 +79,7 @@ On the dashboard, fill in the symbol (e.g. `AAPL`), company name, and sector, th
 
 - Click **Refresh All** to analyze every ticker in your watchlist
 - On a ticker's detail page, click **Refresh This Ticker** for a single stock
-- Each analysis scrapes 5 data sources, runs 8 Claude CLI calls (one per signal + synthesis), and takes ~1-2 minutes per ticker
+- Each analysis scrapes 5 data sources, runs 8 LLM CLI calls (one per signal + synthesis), and takes ~1-2 minutes per ticker
 
 ### View results
 
@@ -110,6 +110,7 @@ stock-selector/
 │   │   └── sector.py         # Sector performance (Finviz groups)
 │   └── analysis/
 │       ├── claude.py          # Claude CLI wrapper
+│       ├── codex.py           # Codex CLI wrapper
 │       ├── prompts.py         # Prompt templates per signal category
 │       ├── scoring.py         # Weighted scoring and recommendation logic
 │       └── engine.py          # Analysis orchestrator (scrape → LLM → DB)
@@ -123,7 +124,7 @@ stock-selector/
 └── tests/
     ├── test_db.py             # Database CRUD tests
     ├── test_scrapers.py       # Base scraper test
-    └── test_claude.py         # Claude CLI wrapper test
+    └── test_claude.py         # Claude + Codex CLI wrapper tests
 ```
 
 ## Tech Stack
@@ -131,7 +132,7 @@ stock-selector/
 - **Backend:** FastAPI, uvicorn, aiosqlite, Pydantic
 - **Frontend:** Jinja2 templates, HTMX, Tailwind CSS (CDN), Chart.js
 - **Scraping:** httpx, BeautifulSoup, lxml
-- **LLM:** Claude Code CLI (`claude --print`)
+- **LLM:** Codex CLI (default) or Claude Code CLI
 - **Database:** SQLite (stored in `data/stock_selector.db`)
 
 ## Running Tests
@@ -148,3 +149,17 @@ python -m pytest tests/ -v
 - Web scraping selectors may break if source sites change their HTML structure
 - The SQLite database is created automatically at `data/stock_selector.db` on first run
 - All scraped data and LLM responses are stored for auditability
+
+## LLM Configuration
+
+By default the app uses the Codex CLI via `codex exec --json "{prompt}"`. You can override:
+
+```bash
+# Use Claude instead
+export STOCK_SELECTOR_LLM=claude
+
+# Customize Codex CLI invocation (prompt via stdin unless {prompt} is used)
+export CODEX_CMD='codex exec --json {prompt}'
+# Example with prompt substitution and extra flags
+export CODEX_CMD='codex exec --json --some-flag {prompt}'
+```

@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 from typing import AsyncGenerator
 from src.scrapers.finviz import FinvizScraper
 from src.scrapers.openinsider import OpenInsiderScraper
 from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
 from src.analysis.claude import ClaudeCLI
+from src.analysis.codex import CodexCLI
 from src.analysis import prompts
 from src.analysis.scoring import weighted_score, score_to_recommendation
 from src.db import Database
@@ -17,7 +19,13 @@ logger = logging.getLogger(__name__)
 class AnalysisEngine:
     def __init__(self, db: Database):
         self.db = db
-        self.claude = ClaudeCLI()
+        backend = os.environ.get("STOCK_SELECTOR_LLM", "codex").lower()
+        if backend == "claude":
+            self.llm = ClaudeCLI()
+        elif backend == "codex":
+            self.llm = CodexCLI()
+        else:
+            raise ValueError("STOCK_SELECTOR_LLM must be 'codex' or 'claude'")
         self.finviz = FinvizScraper()
         self.openinsider = OpenInsiderScraper()
         self.news = NewsScraper()
@@ -86,7 +94,7 @@ class AnalysisEngine:
         for category, prompt_fn, data in categories:
             yield RefreshProgress(symbol=symbol, step=f"Analyzing {category}...", category=category)
             prompt = prompt_fn(symbol, data)
-            result = await self.claude.analyze(prompt)
+            result = await self.llm.analyze(prompt)
             score = result.get("score", 0)
             confidence = result.get("confidence", "low")
             cat_narrative = result.get("narrative", "Analysis unavailable.")
@@ -115,7 +123,7 @@ class AnalysisEngine:
         # Sector context (needs sector param)
         yield RefreshProgress(symbol=symbol, step="Analyzing sector context...", category="sector_context")
         sector_prompt = prompts.sector_prompt(symbol, sector or "Unknown", sector_data)
-        result = await self.claude.analyze(sector_prompt)
+        result = await self.llm.analyze(sector_prompt)
         signal_results["sector_context"] = {
             "score": result.get("score", 0),
             "confidence": result.get("confidence", "low"),
@@ -130,7 +138,7 @@ class AnalysisEngine:
         # Risk assessment
         yield RefreshProgress(symbol=symbol, step="Analyzing risk...", category="risk_assessment")
         risk_prompt_text = prompts.risk_prompt(symbol, all_scraped)
-        result = await self.claude.analyze(risk_prompt_text)
+        result = await self.llm.analyze(risk_prompt_text)
         signal_results["risk_assessment"] = {
             "score": result.get("score", 0),
             "confidence": result.get("confidence", "low"),
@@ -147,7 +155,7 @@ class AnalysisEngine:
         # 6. Synthesis
         yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)
         synthesis_prompt = prompts.synthesis_prompt(symbol, signal_results)
-        synthesis = await self.claude.analyze(synthesis_prompt)
+        synthesis = await self.llm.analyze(synthesis_prompt)
         overall_score = synthesis.get("overall_score", weighted_score(
             {k: v["score"] for k, v in signal_results.items()}
         ))
