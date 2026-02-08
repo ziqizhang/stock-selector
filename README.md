@@ -66,7 +66,9 @@ All data is obtained via web scraping (no API keys required):
 
 ```bash
 source .venv/bin/activate
-python run.py
+python run.py            # default: claude
+python run.py codex      # use codex
+python run.py claude     # explicit claude
 ```
 
 The app starts at `http://localhost:8000` and opens your browser automatically.
@@ -143,6 +145,23 @@ pip install pytest pytest-asyncio pytest-httpx
 python -m pytest tests/ -v
 ```
 
+## Troubleshooting
+
+**Missing module errors (e.g., `uvicorn` not found)**  
+Make sure you are in the right environment and have installed dependencies:
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+If you are using `pyenv` without a virtualenv, install into that environment instead:
+
+```bash
+pyenv local 3.9.1
+pip install -r requirements.txt
+```
+
 ## Notes
 
 - This is a single-user local app — no authentication or multi-user support
@@ -152,7 +171,15 @@ python -m pytest tests/ -v
 
 ## LLM Configuration
 
-By default the app uses the Codex CLI via `codex exec --json "{prompt}"`. You can override:
+By default the app uses Claude when `run.py` is invoked without args. To switch providers, pass a CLI argument:
+
+```bash
+python run.py            # default: claude
+python run.py codex      # use codex
+python run.py claude     # explicit claude
+```
+
+By default, Codex uses `codex exec --json {prompt}`. You can override:
 
 ```bash
 # Use Claude instead
