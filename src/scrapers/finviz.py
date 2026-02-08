@@ -1,5 +1,32 @@
 from src.scrapers.base import BaseScraper
 
+# Keys from the Finviz snapshot table grouped by category
+FUNDAMENTAL_KEYS = {
+    "P/E", "Forward P/E", "PEG", "P/S", "P/B", "P/C", "P/FCF",
+    "EPS (ttm)", "EPS next Y", "EPS next Q", "EPS this Y", "EPS next 5Y",
+    "EPS past 3/5Y", "EPS Q/Q", "EPS Y/Y TTM", "EPS/Sales Surpr.",
+    "Sales", "Sales Q/Q", "Sales Y/Y TTM", "Sales past 3/5Y",
+    "Income", "Gross Margin", "Oper. Margin", "Profit Margin",
+    "ROA", "ROE", "ROIC", "Current Ratio", "Quick Ratio",
+    "Debt/Eq", "LT Debt/Eq", "Market Cap", "Enterprise Value",
+    "EV/EBITDA", "EV/Sales", "Book/sh", "Cash/sh", "Dividend TTM",
+    "Dividend Est.", "Payout", "Employees",
+}
+
+ANALYST_KEYS = {
+    "Target Price", "Recom", "Price", "Insider Own", "Inst Own",
+    "Insider Trans", "Inst Trans", "Short Float", "Short Ratio",
+    "Short Interest",
+}
+
+TECHNICAL_KEYS = {
+    "RSI (14)", "SMA20", "SMA50", "SMA200", "ATR (14)",
+    "Volatility", "Beta", "52W High", "52W Low", "Price",
+    "Prev Close", "Change", "Volume", "Avg Volume", "Rel Volume",
+    "Perf Week", "Perf Month", "Perf Quarter", "Perf Half Y",
+    "Perf Year", "Perf YTD",
+}
+
 
 class FinvizScraper(BaseScraper):
     BASE_URL = "https://finviz.com/quote.ashx"
@@ -7,11 +34,17 @@ class FinvizScraper(BaseScraper):
     async def scrape(self, symbol: str) -> dict:
         html = await self.fetch(f"{self.BASE_URL}?t={symbol}&p=d")
         soup = self.parse_html(html)
-        technicals = self._parse_technicals(soup)
+        all_data = self._parse_snapshot(soup)
         news = self._parse_news(soup)
-        return {"technicals": technicals, "news": news}
+        return {
+            "all_data": all_data,
+            "fundamentals": {k: v for k, v in all_data.items() if k in FUNDAMENTAL_KEYS},
+            "analyst": {k: v for k, v in all_data.items() if k in ANALYST_KEYS},
+            "technicals": {k: v for k, v in all_data.items() if k in TECHNICAL_KEYS},
+            "news": news,
+        }
 
-    def _parse_technicals(self, soup) -> dict:
+    def _parse_snapshot(self, soup) -> dict:
         data = {}
         table = soup.find("table", class_="snapshot-table2")
         if table:

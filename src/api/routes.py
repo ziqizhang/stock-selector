@@ -1,5 +1,7 @@
 import json
+import markdown
 from contextlib import asynccontextmanager
+from markupsafe import Markup
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +14,13 @@ BASE_DIR = Path(__file__).parent.parent.parent
 db = Database()
 
 
+def md_to_html(text: str) -> Markup:
+    """Convert markdown text to safe HTML."""
+    if not text:
+        return Markup("")
+    return Markup(markdown.markdown(text, extensions=["extra", "tables"]))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init()
@@ -22,6 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.filters["markdown"] = md_to_html
 
 
 @app.get("/", response_class=HTMLResponse)

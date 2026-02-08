@@ -20,16 +20,16 @@ class SectorScraper(BaseScraper):
         html = await self.fetch("https://finviz.com/groups.ashx?g=sector&v=110&o=-perf1w")
         soup = self.parse_html(html)
         sector_data = []
-        table = soup.find("table", class_="table-light")
+        table = soup.find("table", class_="groups_table")
         if table:
             for row in table.find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                if len(cells) >= 3:
+                if len(cells) >= 5:
                     sector_data.append({
                         "name": cells[1],
-                        "perf_week": cells[2] if len(cells) > 2 else "",
-                        "perf_month": cells[3] if len(cells) > 3 else "",
-                        "perf_ytd": cells[6] if len(cells) > 6 else "",
+                        "stocks": cells[2],
+                        "market_cap": cells[3],
+                        "perf_week": cells[4] if len(cells) > 4 else "",
                     })
 
         sector_name = sector or "market"

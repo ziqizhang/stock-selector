@@ -1,7 +1,6 @@
 import json
 import logging
 from typing import AsyncGenerator
-from src.scrapers.yahoo import YahooFinanceScraper
 from src.scrapers.finviz import FinvizScraper
 from src.scrapers.openinsider import OpenInsiderScraper
 from src.scrapers.news import NewsScraper
@@ -19,7 +18,6 @@ class AnalysisEngine:
     def __init__(self, db: Database):
         self.db = db
         self.claude = ClaudeCLI()
-        self.yahoo = YahooFinanceScraper()
         self.finviz = FinvizScraper()
         self.openinsider = OpenInsiderScraper()
         self.news = NewsScraper()
@@ -36,27 +34,17 @@ class AnalysisEngine:
         all_scraped = {}
         signal_results = {}
 
-        # 1. Scrape fundamentals + analyst from Yahoo
-        yield RefreshProgress(symbol=symbol, step="Scraping Yahoo Finance...", category="fundamentals")
-        try:
-            yahoo_data = await self.yahoo.scrape(symbol)
-            all_scraped["yahoo"] = yahoo_data
-        except Exception as e:
-            logger.error(f"Yahoo scrape failed for {symbol}: {e}")
-            yahoo_data = {"fundamentals": {}, "analyst": {}}
-            all_scraped["yahoo"] = yahoo_data
-
-        # 2. Scrape technicals + news from Finviz
-        yield RefreshProgress(symbol=symbol, step="Scraping Finviz...", category="technicals")
+        # 1. Scrape from Finviz (fundamentals + technicals + analyst + news)
+        yield RefreshProgress(symbol=symbol, step="Scraping Finviz...", category="fundamentals")
         try:
             finviz_data = await self.finviz.scrape(symbol)
             all_scraped["finviz"] = finviz_data
         except Exception as e:
             logger.error(f"Finviz scrape failed for {symbol}: {e}")
-            finviz_data = {"technicals": {}, "news": []}
+            finviz_data = {"fundamentals": {}, "analyst": {}, "technicals": {}, "news": []}
             all_scraped["finviz"] = finviz_data
 
-        # 3. Scrape insider activity
+        # 2. Scrape insider activity
         yield RefreshProgress(symbol=symbol, step="Scraping OpenInsider...", category="insider_activity")
         try:
             insider_data = await self.openinsider.scrape(symbol)
@@ -66,7 +54,7 @@ class AnalysisEngine:
             insider_data = {"insider_trades": []}
             all_scraped["openinsider"] = insider_data
 
-        # 4. Scrape news
+        # 3. Scrape news
         yield RefreshProgress(symbol=symbol, step="Scraping news...", category="sentiment")
         try:
             news_data = await self.news.scrape(symbol)
@@ -76,7 +64,7 @@ class AnalysisEngine:
             news_data = {"news_articles": []}
             all_scraped["news"] = news_data
 
-        # 5. Scrape sector context
+        # 4. Scrape sector context
         yield RefreshProgress(symbol=symbol, step="Scraping sector data...", category="sector_context")
         try:
             sector_data = await self.sector.scrape(symbol, sector)
@@ -86,13 +74,13 @@ class AnalysisEngine:
             sector_data = {"sector_performance": [], "sector_news": []}
             all_scraped["sector"] = sector_data
 
-        # 6. LLM Analysis — one per signal category
+        # 5. LLM Analysis — one per signal category
         categories = [
-            ("fundamentals", prompts.fundamentals_prompt, yahoo_data.get("fundamentals", {})),
-            ("analyst_consensus", prompts.analyst_prompt, yahoo_data.get("analyst", {})),
+            ("fundamentals", prompts.fundamentals_prompt, finviz_data.get("fundamentals", {})),
+            ("analyst_consensus", prompts.analyst_prompt, finviz_data.get("analyst", {})),
             ("insider_activity", prompts.insider_prompt, insider_data),
             ("technicals", prompts.technicals_prompt, finviz_data.get("technicals", {})),
-            ("sentiment", prompts.sentiment_prompt, {**news_data, **finviz_data.get("news", {})}),
+            ("sentiment", prompts.sentiment_prompt, {**news_data, "finviz_news": finviz_data.get("news", [])}),
         ]
 
         for category, prompt_fn, data in categories:
@@ -101,11 +89,26 @@ class AnalysisEngine:
             result = await self.claude.analyze(prompt)
             score = result.get("score", 0)
             confidence = result.get("confidence", "low")
-            narrative = result.get("narrative", "Analysis unavailable.")
-            signal_results[category] = {"score": score, "confidence": confidence, "narrative": narrative}
+            cat_narrative = result.get("narrative", "Analysis unavailable.")
+
+            # For technicals, append support/resistance/entry info to narrative
+            if category == "technicals":
+                extras = []
+                if result.get("support_levels"):
+                    extras.append("**Support Levels:** " + " | ".join(result["support_levels"]))
+                if result.get("resistance_levels"):
+                    extras.append("**Resistance Levels:** " + " | ".join(result["resistance_levels"]))
+                if result.get("entry_price"):
+                    extras.append("**Suggested Entry:** " + result["entry_price"])
+                if result.get("stop_loss"):
+                    extras.append("**Stop-Loss:** " + result["stop_loss"])
+                if extras:
+                    cat_narrative += "\n\n" + "\n\n".join(extras)
+
+            signal_results[category] = {"score": score, "confidence": confidence, "narrative": cat_narrative}
             await self.db.save_analysis(
                 symbol=symbol, category=category, score=score,
-                confidence=confidence, narrative=narrative,
+                confidence=confidence, narrative=cat_narrative,
                 raw_data=json.dumps(data, default=str),
             )
 
@@ -141,7 +144,7 @@ class AnalysisEngine:
             narrative=result.get("narrative", ""), raw_data=json.dumps(all_scraped, default=str),
         )
 
-        # 7. Synthesis
+        # 6. Synthesis
         yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)
         synthesis_prompt = prompts.synthesis_prompt(symbol, signal_results)
         synthesis = await self.claude.analyze(synthesis_prompt)
@@ -149,18 +152,23 @@ class AnalysisEngine:
             {k: v["score"] for k, v in signal_results.items()}
         ))
         recommendation = synthesis.get("recommendation", score_to_recommendation(overall_score))
+        # Combine narrative with entry strategy
+        narrative = synthesis.get("narrative", "")
+        entry_strategy = synthesis.get("entry_strategy", "")
+        if entry_strategy:
+            narrative += "\n\n## Entry Strategy\n\n" + entry_strategy
+
         await self.db.save_synthesis(
             symbol=symbol,
             overall_score=overall_score,
             recommendation=recommendation,
-            narrative=synthesis.get("narrative", ""),
+            narrative=narrative,
             signal_scores=json.dumps({k: v["score"] for k, v in signal_results.items()}),
         )
 
         yield RefreshProgress(symbol=symbol, step="Complete", done=True)
 
     async def close(self):
-        await self.yahoo.close()
         await self.finviz.close()
         await self.openinsider.close()
         await self.news.close()
