@@ -102,6 +102,10 @@ class CodexCLI:
 
         return {"narrative": text, "parse_error": True}
 
+    _STREAM_EVENT_TYPES = frozenset({
+        "thread.started", "turn.started", "item.completed", "turn.completed",
+    })
+
     def _extract_json_stream_text(self, text: str) -> tuple[str, bool]:
         """Handle Codex --json output by extracting the final agent message text."""
         if not text:
@@ -112,20 +116,22 @@ class CodexCLI:
             return text, False
 
         last_agent_text = None
-        parsed_any = False
+        is_stream = False
         for line in lines:
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            parsed_any = True
+
+            if payload.get("type") in self._STREAM_EVENT_TYPES:
+                is_stream = True
 
             if payload.get("type") == "item.completed":
                 item = payload.get("item") or {}
                 if item.get("type") == "agent_message":
                     last_agent_text = item.get("text", last_agent_text)
 
-        if parsed_any:
+        if is_stream:
             if last_agent_text is not None:
                 return last_agent_text.strip(), True
             return "", True
