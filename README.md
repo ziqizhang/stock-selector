@@ -24,8 +24,7 @@ All data is obtained via web scraping (no API keys required):
 
 | Source | Data |
 |--------|------|
-| Yahoo Finance | Fundamentals, analyst ratings |
-| Finviz | Technicals, stock news |
+| Finviz | Fundamentals, technicals, analyst data, stock news |
 | OpenInsider | Insider trading activity |
 | Google News | General news sentiment |
 | Finviz Groups | Sector performance |
@@ -105,7 +104,6 @@ stock-selector/
 │   │   └── websocket.py      # WebSocket handlers for refresh progress
 │   ├── scrapers/
 │   │   ├── base.py           # Base scraper with httpx client
-│   │   ├── yahoo.py          # Yahoo Finance (fundamentals + analyst)
 │   │   ├── finviz.py         # Finviz (technicals + news)
 │   │   ├── openinsider.py    # OpenInsider (insider trades)
 │   │   ├── news.py           # Google News (sentiment)
