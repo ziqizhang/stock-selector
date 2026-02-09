@@ -1,6 +1,6 @@
 # Stock Selector
 
-This is a personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Codex CLI (default) or Claude Code CLI for AI-powered analysis and scoring.
+This is a personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Claude Code CLI (default) or Codex CLI for AI-powered analysis and scoring.
 
 ## Features
 
@@ -13,7 +13,7 @@ This is a personal stock tracker and analysis dashboard that helps decide whethe
   - Sentiment & news (recent news tone, event significance)
   - Sector context (sector-relative performance, rotation trends)
   - Risk assessment (bull/bear case, volatility)
-- **AI-powered synthesis** — Codex (default) or Claude analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
+- **AI-powered synthesis** — Claude (default) or Codex analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
 - **Score history** — Historical analyses are stored so you can track score changes over time
 - **Real-time progress** — WebSocket-based streaming shows scraping and analysis progress as it happens
 - **Staleness alerts** — On startup, the app prompts to refresh if any analysis data is older than 24 hours
@@ -33,7 +33,7 @@ All data is obtained via web scraping (no API keys required):
 ## Prerequisites
 
 - **Python 3.10+**
-- **Codex CLI** (default) or **Claude Code CLI** — for LLM analysis. By default the app calls `codex exec` (configurable) to run prompts. Claude CLI is also supported via `STOCK_SELECTOR_LLM=claude`.
+- **Claude Code CLI** (default) or **Codex CLI** — for LLM analysis. By default the app uses Claude Code CLI. Codex CLI is also supported via `STOCK_SELECTOR_LLM=codex`.
 
 ## Setup
 
@@ -134,7 +134,7 @@ stock-selector/
 - **Backend:** FastAPI, uvicorn, aiosqlite, Pydantic
 - **Frontend:** Jinja2 templates, HTMX, Tailwind CSS (CDN), Chart.js
 - **Scraping:** httpx, BeautifulSoup, lxml
-- **LLM:** Codex CLI (default) or Claude Code CLI
+- **LLM:** Claude Code CLI (default) or Codex CLI
 - **Database:** SQLite (stored in `data/stock_selector.db`)
 
 ## Running Tests
