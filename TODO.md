@@ -7,68 +7,31 @@
 
 ---
 
-## P0: Critical — Tech Debt & Bugs
+## P0: Critical — Tech Debt & Bugs ✅ COMPLETED
 
-These are existing risks and bugs that should be fixed before adding new features.
+All P0 items have been resolved and merged to main.
 
-### 1. Validate LLM score output `[tech-debt]`
-The app stores whatever score the LLM returns with no validation. If Claude/Codex returns `{"score": 50}`, it's stored as-is, corrupting charts and recommendations.
+### ~~1. Validate LLM score output~~ `[tech-debt]` — Done (Issue #1)
+Added `_validate_signal_result()` helper in `engine.py`. Clamps scores to [-10, +10], validates confidence, logs warnings. 11 new tests.
 
-**Fix:** Clamp scores to [-10, +10] in `engine.py` after each `llm.analyze()` call. Log a warning if clamping was needed. Also validate that `confidence` is one of `low/medium/high` and default to `low` if not.
+### ~~2. Wire up scrape cache~~ `[tech-debt]` — Done (Issue #2)
+Cache callbacks injected into `BaseScraper.fetch()`. Cache hit skips HTTP, miss saves response. 2 new tests.
 
-**Files:** `src/analysis/engine.py`
+### ~~3. Add rate limiting to scrapers~~ `[tech-debt]` — Done (Issue #3)
+Per-domain rate limiting (1 req/sec) using asyncio locks in `BaseScraper.fetch()`. HTTP request runs inside the lock.
 
----
+### ~~4. Fix README inconsistency~~ `[tech-debt]` — Done (Issue #4)
+README now consistently says Claude is the default LLM provider.
 
-### 2. Wire up scrape cache (it's implemented but unused) `[tech-debt]`
-`db.py` has `save_scrape_cache()` and `get_cached_scrape()` with a 24h TTL, but `engine.py` never calls them. Every refresh re-scrapes all sources even if data was fetched minutes ago.
-
-**Fix:** In each scraper's `fetch()` or in `engine.py`, check the cache before making HTTP requests. Save responses to cache after fetching. Respect the 24h TTL. This also reduces the risk of IP bans.
-
-**Files:** `src/analysis/engine.py`, `src/scrapers/base.py`, `src/db.py`
-
----
-
-### 3. Add rate limiting to scrapers `[tech-debt]`
-"Refresh All" on 20 tickers fires 20+ HTTP requests to Finviz in rapid succession. This will get the user's IP banned.
-
-**Fix:** Add a per-domain rate limiter (e.g., 1 request per second per domain) in `BaseScraper.fetch()`. Use `asyncio.Semaphore` or a simple token-bucket implementation.
-
-**Files:** `src/scrapers/base.py`
-
----
-
-### 4. Fix README inconsistency — default LLM provider `[tech-debt]`
-The README says "Codex CLI (default)" in several places, but `run.py` defaults to Claude (`os.environ.setdefault("STOCK_SELECTOR_LLM", "claude")`). The README contradicts itself.
-
-**Fix:** Update README to consistently say Claude is the default, or change `run.py` to match the README. Align on one source of truth.
-
-**Files:** `README.md`, possibly `run.py`
-
----
-
-### 5. Remove dead Yahoo scraper `[tech-debt]`
-`src/scrapers/yahoo.py` exists but is imported nowhere and used by nothing. It's dead code that will confuse contributors.
-
-**Fix:** Delete `src/scrapers/yahoo.py`. Remove any references in README. (Note: we may re-introduce Yahoo via yfinance later — that will be a new, proper implementation.)
-
-**Files:** `src/scrapers/yahoo.py`, `README.md`
+### ~~5. Remove dead Yahoo scraper~~ `[tech-debt]` — Done (Issue #5)
+Deleted `src/scrapers/yahoo.py` and removed all README references.
 
 ---
 
 ## P1: High Priority — Features
 
-### 6. Selective refresh from dashboard `[feature]` `[ux]`
-Currently the dashboard only has "Refresh All" (all tickers sequentially). Users need to refresh a subset without navigating to each detail page.
-
-**Implementation:**
-- Add a checkbox column to the watchlist table on the dashboard
-- Add a "Refresh Selected" button (disabled when nothing is checked, hidden when all are checked — show "Refresh All" instead)
-- New WebSocket endpoint: `WS /ws/refresh-selected` that accepts a list of symbols
-- New handler in `websocket.py` similar to `handle_refresh_all()` but filtered to selected symbols
-- Progress display should show "(2/5) Analyzing AAPL..." style updates
-
-**Files:** `templates/dashboard.html`, `static/js/app.js`, `src/api/routes.py`, `src/api/websocket.py`
+### ~~6. Selective refresh from dashboard~~ `[feature]` `[ux]` — Done (Issue #6)
+Added checkboxes to dashboard table, "Refresh Selected" button, `/ws/refresh-selected` WebSocket endpoint with input validation. Select-all toggle included.
 
 ---
 
@@ -212,7 +175,7 @@ Track historical recommendations vs actual price movement. Show a "hit rate" —
 ## Dependency on Each Other
 
 ```
-[5. Remove dead Yahoo scraper]
+[✅ 5. Remove dead Yahoo scraper]
         ↓
 [7. Migrate to yfinance] ← required before →  [8. UK market support]
         ↓                                              ↓
@@ -222,13 +185,11 @@ Track historical recommendations vs actual price movement. Show a "hit rate" —
 ```
 
 ```
-[2. Wire up scrape cache] → [11. Cache LLM responses]
+[✅ 2. Wire up scrape cache] → [11. Cache LLM responses]
 ```
 
 ```
-[3. Rate limiting] — independent, do anytime
-[1. Score validation] — independent, do anytime
-[6. Selective refresh] — independent, do anytime
+✅ 1, 2, 3, 4, 5, 6 — all completed
 ```
 
 ---
