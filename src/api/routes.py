@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from src.db import Database
-from src.api.websocket import handle_refresh, handle_refresh_all
+from src.api.websocket import handle_refresh, handle_refresh_all, handle_refresh_selected
 
 BASE_DIR = Path(__file__).parent.parent.parent
 db = Database()
@@ -92,5 +92,16 @@ async def ws_refresh_all(websocket: WebSocket):
     await websocket.accept()
     try:
         await handle_refresh_all(websocket, db)
+    except WebSocketDisconnect:
+        pass
+
+
+@app.websocket("/ws/refresh-selected")
+async def ws_refresh_selected(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        message = await websocket.receive_text()
+        symbols = json.loads(message)
+        await handle_refresh_selected(websocket, db, symbols)
     except WebSocketDisconnect:
         pass
