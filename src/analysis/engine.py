@@ -12,6 +12,7 @@ from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
 from src.analysis.claude import ClaudeCLI
 from src.analysis.codex import CodexCLI
+from src.analysis.opencode import OpencodeCLI
 from src.analysis import prompts
 from src.analysis.scoring import weighted_score, score_to_recommendation
 from src.db import Database
@@ -54,8 +55,10 @@ class AnalysisEngine:
             self.llm = ClaudeCLI()
         elif backend == "codex":
             self.llm = CodexCLI()
+        elif backend == "opencode":
+            self.llm = OpencodeCLI()
         else:
-            raise ValueError("STOCK_SELECTOR_LLM must be 'codex' or 'claude'")
+            raise ValueError("STOCK_SELECTOR_LLM must be 'codex', 'claude', or 'opencode'")
         cache_get = db.get_cached_scrape
         cache_save = db.save_scrape_cache
         if data_provider is not None:
