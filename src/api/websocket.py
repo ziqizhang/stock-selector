@@ -42,3 +42,27 @@ async def handle_refresh_all(websocket: WebSocket, db: Database):
         await websocket.send_text(json.dumps({"type": "all_done"}))
     finally:
         await engine.close()
+
+
+async def handle_refresh_selected(websocket: WebSocket, db: Database, symbols: list[str]):
+    """Refresh only the selected tickers, streaming progress."""
+    total = len(symbols)
+    engine = AnalysisEngine(db)
+    try:
+        for i, symbol in enumerate(symbols):
+            await websocket.send_text(json.dumps({
+                "type": "ticker_start",
+                "symbol": symbol,
+                "index": i + 1,
+                "total": total,
+            }))
+            async for progress in engine.analyze_ticker(symbol):
+                await websocket.send_text(json.dumps({
+                    "symbol": progress.symbol,
+                    "step": progress.step,
+                    "category": progress.category,
+                    "done": progress.done,
+                }))
+        await websocket.send_text(json.dumps({"type": "all_done"}))
+    finally:
+        await engine.close()
