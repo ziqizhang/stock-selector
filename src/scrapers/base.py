@@ -1,3 +1,7 @@
+import asyncio
+import time
+from urllib.parse import urlparse
+
 import httpx
 from bs4 import BeautifulSoup
 
@@ -9,6 +13,10 @@ class BaseScraper:
         "Accept-Language": "en-US,en;q=0.5",
     }
 
+    _domain_locks: dict[str, asyncio.Lock] = {}
+    _last_request: dict[str, float] = {}
+    _min_interval: float = 1.0  # seconds between requests to the same domain
+
     def __init__(self):
         self.client = httpx.AsyncClient(
             headers=self.HEADERS,
@@ -17,6 +25,16 @@ class BaseScraper:
         )
 
     async def fetch(self, url: str) -> str:
+        domain = urlparse(url).netloc
+        if domain not in self._domain_locks:
+            self._domain_locks[domain] = asyncio.Lock()
+
+        async with self._domain_locks[domain]:
+            elapsed = time.monotonic() - self._last_request.get(domain, 0.0)
+            if elapsed < self._min_interval:
+                await asyncio.sleep(self._min_interval - elapsed)
+            self._last_request[domain] = time.monotonic()
+
         response = await self.client.get(url)
         response.raise_for_status()
         return response.text
