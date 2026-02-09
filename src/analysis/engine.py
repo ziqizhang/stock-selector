@@ -15,6 +15,32 @@ from src.models import RefreshProgress
 
 logger = logging.getLogger(__name__)
 
+VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
+
+
+def _validate_signal_result(result: dict) -> dict:
+    """Clamp score to [-10, +10] and validate confidence level."""
+    validated = dict(result)
+
+    raw_score = validated.get("score", 0)
+    clamped_score = max(-10, min(10, raw_score))
+    if clamped_score != raw_score:
+        logger.warning(
+            "Score %s out of range [-10, +10], clamped to %s",
+            raw_score, clamped_score,
+        )
+    validated["score"] = clamped_score
+
+    raw_confidence = validated.get("confidence", "low")
+    if raw_confidence not in VALID_CONFIDENCE_LEVELS:
+        logger.warning(
+            "Invalid confidence '%s', defaulting to 'low'", raw_confidence,
+        )
+        raw_confidence = "low"
+    validated["confidence"] = raw_confidence
+
+    return validated
+
 
 class AnalysisEngine:
     def __init__(self, db: Database):
@@ -94,9 +120,9 @@ class AnalysisEngine:
         for category, prompt_fn, data in categories:
             yield RefreshProgress(symbol=symbol, step=f"Analyzing {category}...", category=category)
             prompt = prompt_fn(symbol, data)
-            result = await self.llm.analyze(prompt)
-            score = result.get("score", 0)
-            confidence = result.get("confidence", "low")
+            result = _validate_signal_result(await self.llm.analyze(prompt))
+            score = result["score"]
+            confidence = result["confidence"]
             cat_narrative = result.get("narrative", "Analysis unavailable.")
 
             # For technicals, append support/resistance/entry info to narrative
@@ -123,32 +149,32 @@ class AnalysisEngine:
         # Sector context (needs sector param)
         yield RefreshProgress(symbol=symbol, step="Analyzing sector context...", category="sector_context")
         sector_prompt = prompts.sector_prompt(symbol, sector or "Unknown", sector_data)
-        result = await self.llm.analyze(sector_prompt)
+        result = _validate_signal_result(await self.llm.analyze(sector_prompt))
         signal_results["sector_context"] = {
-            "score": result.get("score", 0),
-            "confidence": result.get("confidence", "low"),
+            "score": result["score"],
+            "confidence": result["confidence"],
             "narrative": result.get("narrative", ""),
         }
         await self.db.save_analysis(
             symbol=symbol, category="sector_context",
-            score=result.get("score", 0), confidence=result.get("confidence", "low"),
+            score=result["score"], confidence=result["confidence"],
             narrative=result.get("narrative", ""), raw_data=json.dumps(sector_data, default=str),
         )
 
         # Risk assessment
         yield RefreshProgress(symbol=symbol, step="Analyzing risk...", category="risk_assessment")
         risk_prompt_text = prompts.risk_prompt(symbol, all_scraped)
-        result = await self.llm.analyze(risk_prompt_text)
+        result = _validate_signal_result(await self.llm.analyze(risk_prompt_text))
         signal_results["risk_assessment"] = {
-            "score": result.get("score", 0),
-            "confidence": result.get("confidence", "low"),
+            "score": result["score"],
+            "confidence": result["confidence"],
             "narrative": result.get("narrative", ""),
             "bull_case": result.get("bull_case", ""),
             "bear_case": result.get("bear_case", ""),
         }
         await self.db.save_analysis(
             symbol=symbol, category="risk_assessment",
-            score=result.get("score", 0), confidence=result.get("confidence", "low"),
+            score=result["score"], confidence=result["confidence"],
             narrative=result.get("narrative", ""), raw_data=json.dumps(all_scraped, default=str),
         )
 
@@ -156,9 +182,15 @@ class AnalysisEngine:
         yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)
         synthesis_prompt = prompts.synthesis_prompt(symbol, signal_results)
         synthesis = await self.llm.analyze(synthesis_prompt)
-        overall_score = synthesis.get("overall_score", weighted_score(
+        raw_overall = synthesis.get("overall_score", weighted_score(
             {k: v["score"] for k, v in signal_results.items()}
         ))
+        overall_score = max(-10, min(10, raw_overall))
+        if overall_score != raw_overall:
+            logger.warning(
+                "Overall score %s out of range [-10, +10], clamped to %s",
+                raw_overall, overall_score,
+            )
         recommendation = synthesis.get("recommendation", score_to_recommendation(overall_score))
         # Combine narrative with entry strategy
         narrative = synthesis.get("narrative", "")
