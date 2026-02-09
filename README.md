@@ -105,7 +105,6 @@ stock-selector/
 │   │   └── websocket.py      # WebSocket handlers for refresh progress
 │   ├── scrapers/
 │   │   ├── base.py           # Base scraper with httpx client
-│   │   ├── yahoo.py          # Yahoo Finance (fundamentals + analyst)
 │   │   ├── finviz.py         # Finviz (technicals + news)
 │   │   ├── openinsider.py    # OpenInsider (insider trades)
 │   │   ├── news.py           # Google News (sentiment)
