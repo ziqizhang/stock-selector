@@ -96,7 +96,7 @@ class AnalysisEngine:
         resolved = ticker.get("resolved_symbol") or symbol
         if isinstance(self.data_provider, YFinanceProvider) and not ticker.get("resolved_symbol"):
             try:
-                resolved, market = self.data_provider.resolve_symbol(symbol)
+                resolved, market = self.data_provider.resolve_symbol(symbol, preferred_market=market)
                 await self.db.update_ticker_resolution(symbol, resolved, market)
             except ValueError:
                 logger.warning(f"Could not resolve symbol {symbol}, using as-is")
