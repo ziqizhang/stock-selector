@@ -102,6 +102,13 @@ async def ws_refresh_selected(websocket: WebSocket):
     try:
         message = await websocket.receive_text()
         symbols = json.loads(message)
+        if not isinstance(symbols, list) or not all(isinstance(s, str) for s in symbols):
+            await websocket.close(code=1003, reason="Expected JSON array of strings")
+            return
+        if len(symbols) == 0:
+            await websocket.send_text(json.dumps({"type": "all_done"}))
+            await websocket.close()
+            return
         await handle_refresh_selected(websocket, db, symbols)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, json.JSONDecodeError):
         pass
