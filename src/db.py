@@ -1,7 +1,10 @@
+import asyncio
+
 import aiosqlite
 from pathlib import Path
 
-SCHEMA_PATH = Path(__file__).parent.parent / "db" / "schema.sql"
+ALEMBIC_DIR = Path(__file__).resolve().parent.parent / "alembic"
+ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
 
 
 class Database:
@@ -9,23 +12,43 @@ class Database:
         self.db_path = db_path
         self.db: aiosqlite.Connection | None = None
 
+    def _run_migrations(self) -> None:
+        """Run Alembic migrations synchronously (called via ``asyncio.to_thread``)."""
+        from alembic import command
+        from alembic.config import Config
+
+        cfg = Config(str(ALEMBIC_INI))
+        cfg.set_main_option("script_location", str(ALEMBIC_DIR))
+        cfg.set_main_option("sqlalchemy.url", f"sqlite:///{self.db_path}")
+        command.upgrade(cfg, "head")
+
     async def init(self):
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(self._run_migrations)
         self.db = await aiosqlite.connect(self.db_path)
         self.db.row_factory = aiosqlite.Row
         await self.db.execute("PRAGMA foreign_keys = ON")
-        schema = SCHEMA_PATH.read_text()
-        await self.db.executescript(schema)
-        await self.db.commit()
 
     async def close(self):
         if self.db:
             await self.db.close()
 
-    async def add_ticker(self, symbol: str, name: str, sector: str | None = None):
+    async def add_ticker(
+        self, symbol: str, name: str, sector: str | None = None,
+        market: str = "US", resolved_symbol: str | None = None,
+    ):
         await self.db.execute(
-            "INSERT OR IGNORE INTO tickers (symbol, name, sector) VALUES (?, ?, ?)",
-            (symbol.upper(), name, sector),
+            "INSERT OR IGNORE INTO tickers (symbol, name, sector, market, resolved_symbol) VALUES (?, ?, ?, ?, ?)",
+            (symbol.upper(), name, sector, market, resolved_symbol),
+        )
+        await self.db.commit()
+
+    async def update_ticker_resolution(
+        self, symbol: str, resolved_symbol: str, market: str,
+    ):
+        await self.db.execute(
+            "UPDATE tickers SET resolved_symbol = ?, market = ? WHERE symbol = ?",
+            (resolved_symbol, market, symbol.upper()),
         )
         await self.db.commit()
 

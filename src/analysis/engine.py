@@ -2,7 +2,10 @@ import json
 import logging
 import os
 from typing import AsyncGenerator
+from src.scrapers.provider import DataProvider
 from src.scrapers.finviz import FinvizScraper
+from src.scrapers.finviz_provider import FinvizDataProvider
+from src.scrapers.yfinance_provider import YFinanceProvider
 from src.scrapers.openinsider import OpenInsiderScraper
 from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
@@ -43,7 +46,7 @@ def _validate_signal_result(result: dict) -> dict:
 
 
 class AnalysisEngine:
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, data_provider: DataProvider | None = None):
         self.db = db
         backend = os.environ.get("STOCK_SELECTOR_LLM", "codex").lower()
         if backend == "claude":
@@ -54,7 +57,20 @@ class AnalysisEngine:
             raise ValueError("STOCK_SELECTOR_LLM must be 'codex' or 'claude'")
         cache_get = db.get_cached_scrape
         cache_save = db.save_scrape_cache
-        self.finviz = FinvizScraper(cache_get=cache_get, cache_save=cache_save)
+        if data_provider is not None:
+            self.data_provider = data_provider
+        else:
+            source = os.environ.get("STOCK_SELECTOR_DATA_SOURCE", "yfinance").lower()
+            if source == "yfinance":
+                self.data_provider = YFinanceProvider()
+            elif source == "finviz":
+                self.data_provider = FinvizDataProvider(
+                    FinvizScraper(cache_get=cache_get, cache_save=cache_save)
+                )
+            else:
+                raise ValueError(
+                    f"STOCK_SELECTOR_DATA_SOURCE must be 'yfinance' or 'finviz', got '{source}'"
+                )
         self.openinsider = OpenInsiderScraper(cache_get=cache_get, cache_save=cache_save)
         self.news = NewsScraper(cache_get=cache_get, cache_save=cache_save)
         self.sector = SectorScraper(cache_get=cache_get, cache_save=cache_save)
@@ -67,26 +83,52 @@ class AnalysisEngine:
             return
 
         sector = ticker.get("sector")
+        market = ticker.get("market", "US")
         all_scraped = {}
         signal_results = {}
 
-        # 1. Scrape from Finviz (fundamentals + technicals + analyst + news)
-        yield RefreshProgress(symbol=symbol, step="Scraping Finviz...", category="fundamentals")
-        try:
-            finviz_data = await self.finviz.scrape(symbol)
-            all_scraped["finviz"] = finviz_data
-        except Exception as e:
-            logger.error(f"Finviz scrape failed for {symbol}: {e}")
-            finviz_data = {"fundamentals": {}, "analyst": {}, "technicals": {}, "news": []}
-            all_scraped["finviz"] = finviz_data
+        # Resolve symbol via yfinance if using that provider and not yet resolved
+        resolved = ticker.get("resolved_symbol") or symbol
+        if isinstance(self.data_provider, YFinanceProvider) and not ticker.get("resolved_symbol"):
+            try:
+                resolved, market = self.data_provider.resolve_symbol(symbol)
+                await self.db.update_ticker_resolution(symbol, resolved, market)
+            except ValueError:
+                logger.warning(f"Could not resolve symbol {symbol}, using as-is")
+                resolved = symbol
 
-        # 2. Scrape insider activity
-        yield RefreshProgress(symbol=symbol, step="Scraping OpenInsider...", category="insider_activity")
+        # 1. Fetch primary data (fundamentals + technicals + analyst + news)
+        yield RefreshProgress(symbol=symbol, step="Fetching market data...", category="fundamentals")
         try:
-            insider_data = await self.openinsider.scrape(symbol)
+            fundamentals = await self.data_provider.get_fundamentals(resolved)
+            technicals = await self.data_provider.get_technicals(resolved)
+            analyst = await self.data_provider.get_analyst_data(resolved)
+            provider_news = await self.data_provider.get_news(resolved)
+        except Exception as e:
+            logger.error(f"Data provider scrape failed for {symbol}: {e}")
+            fundamentals = {}
+            technicals = {}
+            analyst = {}
+            provider_news = []
+        finviz_data = {
+            "fundamentals": fundamentals,
+            "analyst": analyst,
+            "technicals": technicals,
+            "news": provider_news,
+        }
+        all_scraped["primary"] = finviz_data
+
+        # 2. Scrape insider activity (market-dependent)
+        yield RefreshProgress(symbol=symbol, step="Scraping insider data...", category="insider_activity")
+        try:
+            if market == "UK":
+                # UK insider data not yet implemented (Issue #8b); fall back to empty
+                insider_data = {"insider_trades": []}
+            else:
+                insider_data = await self.openinsider.scrape(symbol)
             all_scraped["openinsider"] = insider_data
         except Exception as e:
-            logger.error(f"OpenInsider scrape failed for {symbol}: {e}")
+            logger.error(f"Insider scrape failed for {symbol}: {e}")
             insider_data = {"insider_trades": []}
             all_scraped["openinsider"] = insider_data
 
@@ -116,7 +158,7 @@ class AnalysisEngine:
             ("analyst_consensus", prompts.analyst_prompt, finviz_data.get("analyst", {})),
             ("insider_activity", prompts.insider_prompt, insider_data),
             ("technicals", prompts.technicals_prompt, finviz_data.get("technicals", {})),
-            ("sentiment", prompts.sentiment_prompt, {**news_data, "finviz_news": finviz_data.get("news", [])}),
+            ("sentiment", prompts.sentiment_prompt, {**news_data, "provider_news": provider_news}),
         ]
 
         for category, prompt_fn, data in categories:
@@ -211,7 +253,7 @@ class AnalysisEngine:
         yield RefreshProgress(symbol=symbol, step="Complete", done=True)
 
     async def close(self):
-        await self.finviz.close()
+        await self.data_provider.close()
         await self.openinsider.close()
         await self.news.close()
         await self.sector.close()

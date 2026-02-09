@@ -1,0 +1,16 @@
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class DataProvider(Protocol):
+    """Interface for primary market-data providers (fundamentals, technicals, analyst, news)."""
+
+    async def get_fundamentals(self, symbol: str) -> dict: ...
+
+    async def get_technicals(self, symbol: str) -> dict: ...
+
+    async def get_analyst_data(self, symbol: str) -> dict: ...
+
+    async def get_news(self, symbol: str) -> list[dict]: ...
+
+    async def close(self) -> None: ...

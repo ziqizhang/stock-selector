@@ -1,7 +1,13 @@
+-- NOTE: This file is kept for reference only.
+-- Schema changes are now managed by Alembic migrations in alembic/versions/.
+-- Run: alembic upgrade head
+
 CREATE TABLE IF NOT EXISTS tickers (
     symbol TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     sector TEXT,
+    market TEXT DEFAULT 'US',
+    resolved_symbol TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
