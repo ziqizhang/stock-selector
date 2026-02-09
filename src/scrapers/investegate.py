@@ -20,23 +20,41 @@ class InvestegateScraper(BaseScraper):
         soup = self.parse_html(html)
 
         matching_links = []
-        for row in soup.select("tr"):
-            cells = row.find_all("td")
-            if len(cells) < 4:
-                continue
-            # The listing table has columns like: Date, Source, Headline
-            # Company symbols/names appear in the source or headline cells
-            row_text = row.get_text(" ", strip=True).upper()
-            if bare_symbol.upper() in row_text:
-                link = row.find("a", href=True)
-                if link and "/Article.aspx" in link["href"]:
-                    href = link["href"]
-                    if not href.startswith("http"):
-                        href = self.BASE_URL + "/" + href.lstrip("/")
+        
+        # Look for all announcement links and filter by symbol
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+            text = str(link.get_text(strip=True)).upper()
+            
+            # Check if this is an announcement link (updated pattern)
+            href_str = str(href)
+            if "/announcement/" in href_str:
+                # Check if symbol appears in text or URL
+                if bare_symbol in text or bare_symbol in href_str.upper():
+                    # Initialize date for this link
+                    date = ""
+                    # Get the parent container to find date info
+                    parent = link.find_parent()
+                    # Try to find date in parent or nearby elements
+                    for elem in [parent, link.find_previous(), link.find_next()]:
+                        if elem:
+                            elem_text = elem.get_text(strip=True)
+                            # Look for date patterns (YYYY-MM-DD, DD/MM/YYYY, etc.)
+                            date_match = re.search(r'\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}|\d{4}[/\-]\d{1,2}[/\-]\d{1,2}', elem_text)
+                            if date_match:
+                                date = date_match.group()
+                                break
+                    
+                    href_str = str(href)
+                    if not str(href_str).startswith("http"):
+                        full_href = self.BASE_URL + str(href_str).lstrip("/")
+                    else:
+                        full_href = href_str
+                    
                     matching_links.append({
-                        "url": href,
+                        "url": full_href,
                         "headline": link.get_text(strip=True),
-                        "date": cells[0].get_text(strip=True) if cells else "",
+                        "date": date,
                     })
 
         # Fetch detail pages for top 5 matching announcements
