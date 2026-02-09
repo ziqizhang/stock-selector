@@ -1,6 +1,6 @@
 # Stock Selector
 
-A personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Codex CLI (default) or Claude Code CLI for AI-powered analysis and scoring.
+This is a personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Codex CLI (default) or Claude Code CLI for AI-powered analysis and scoring.
 
 ## Features
 
