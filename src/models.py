@@ -29,12 +29,14 @@ class TickerCreate(BaseModel):
     symbol: str
     name: str
     sector: str | None = None
+    market: str = "US"
 
 
 class TickerResponse(BaseModel):
     symbol: str
     name: str
     sector: str | None
+    market: str = "US"
     added_at: str | None
 
 
@@ -57,6 +59,7 @@ class DashboardRow(BaseModel):
     symbol: str
     name: str
     sector: str | None
+    market: str = "US"
     overall_score: float | None
     recommendation: str | None
     last_refreshed: str | None

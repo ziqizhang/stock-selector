@@ -142,7 +142,7 @@ class Database:
 
     async def get_dashboard_data(self) -> list[dict]:
         cursor = await self.db.execute(
-            """SELECT t.symbol, t.name, t.sector, t.added_at,
+            """SELECT t.symbol, t.name, t.sector, t.market, t.added_at,
                       s.overall_score, s.recommendation, s.created_at as last_refreshed
                FROM tickers t
                LEFT JOIN syntheses s ON t.symbol = s.symbol

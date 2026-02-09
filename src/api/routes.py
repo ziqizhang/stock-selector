@@ -46,8 +46,8 @@ async def dashboard(request: Request):
 
 
 @app.post("/tickers")
-async def add_ticker(symbol: str = Form(...), name: str = Form(...), sector: str = Form(None)):
-    await db.add_ticker(symbol.upper(), name, sector)
+async def add_ticker(symbol: str = Form(...), name: str = Form(...), sector: str = Form(None), market: str = Form("US")):
+    await db.add_ticker(symbol.upper(), name, sector, market=market)
     return RedirectResponse(url="/", status_code=303)
 
 

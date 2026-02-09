@@ -7,6 +7,7 @@ from src.scrapers.finviz import FinvizScraper
 from src.scrapers.finviz_provider import FinvizDataProvider
 from src.scrapers.yfinance_provider import YFinanceProvider
 from src.scrapers.openinsider import OpenInsiderScraper
+from src.scrapers.investegate import InvestegateScraper
 from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
 from src.analysis.claude import ClaudeCLI
@@ -72,6 +73,7 @@ class AnalysisEngine:
                     f"STOCK_SELECTOR_DATA_SOURCE must be 'yfinance' or 'finviz', got '{source}'"
                 )
         self.openinsider = OpenInsiderScraper(cache_get=cache_get, cache_save=cache_save)
+        self.investegate = InvestegateScraper(cache_get=cache_get, cache_save=cache_save)
         self.news = NewsScraper(cache_get=cache_get, cache_save=cache_save)
         self.sector = SectorScraper(cache_get=cache_get, cache_save=cache_save)
 
@@ -122,8 +124,7 @@ class AnalysisEngine:
         yield RefreshProgress(symbol=symbol, step="Scraping insider data...", category="insider_activity")
         try:
             if market == "UK":
-                # UK insider data not yet implemented (Issue #8b); fall back to empty
-                insider_data = {"insider_trades": []}
+                insider_data = await self.investegate.scrape(symbol)
             else:
                 insider_data = await self.openinsider.scrape(symbol)
             all_scraped["openinsider"] = insider_data
@@ -145,7 +146,7 @@ class AnalysisEngine:
         # 4. Scrape sector context
         yield RefreshProgress(symbol=symbol, step="Scraping sector data...", category="sector_context")
         try:
-            sector_data = await self.sector.scrape(symbol, sector)
+            sector_data = await self.sector.scrape(symbol, sector, market=market)
             all_scraped["sector"] = sector_data
         except Exception as e:
             logger.error(f"Sector scrape failed for {symbol}: {e}")
@@ -255,5 +256,6 @@ class AnalysisEngine:
     async def close(self):
         await self.data_provider.close()
         await self.openinsider.close()
+        await self.investegate.close()
         await self.news.close()
         await self.sector.close()
