@@ -24,8 +24,7 @@ All data is obtained via web scraping (no API keys required):
 
 | Source | Data |
 |--------|------|
-| Yahoo Finance | Fundamentals, analyst ratings |
-| Finviz | Technicals, stock news |
+| Finviz | Fundamentals, technicals, analyst data, stock news |
 | OpenInsider | Insider trading activity |
 | Google News | General news sentiment |
 | Finviz Groups | Sector performance |
