@@ -1,6 +1,6 @@
 # Stock Selector
 
-This is a personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Claude Code CLI (default) or Codex CLI for AI-powered analysis and scoring.
+This is a personal stock tracker and analysis dashboard that helps decide whether to buy, hold, or sell stocks. Runs locally as a web app, uses web scraping for market data and Claude Code CLI (default), Codex CLI, or Opencode CLI for AI-powered analysis and scoring.
 
 ## Features
 
@@ -13,7 +13,7 @@ This is a personal stock tracker and analysis dashboard that helps decide whethe
   - Sentiment & news (recent news tone, event significance)
   - Sector context (sector-relative performance, rotation trends)
   - Risk assessment (bull/bear case, volatility)
-- **AI-powered synthesis** — Claude (default) or Codex analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
+- **AI-powered synthesis** — Claude (default), Codex, or Opencode analyzes scraped data per signal category, then synthesizes all signals into an overall buy/hold/sell recommendation with narrative explanation
 - **Score history** — Historical analyses are stored so you can track score changes over time
 - **Real-time progress** — WebSocket-based streaming shows scraping and analysis progress as it happens
 - **Staleness alerts** — On startup, the app prompts to refresh if any analysis data is older than 24 hours
@@ -32,7 +32,7 @@ All data is obtained via web scraping (no API keys required):
 ## Prerequisites
 
 - **Python 3.10+**
-- **Claude Code CLI** (default) or **Codex CLI** — for LLM analysis. By default the app uses Claude Code CLI. Codex CLI is also supported via `STOCK_SELECTOR_LLM=codex`.
+- **Claude Code CLI** (default), **Codex CLI**, or **Opencode CLI** — for LLM analysis. By default the app uses Claude Code CLI. Codex CLI and Opencode CLI are also supported via `STOCK_SELECTOR_LLM=codex` or `STOCK_SELECTOR_LLM=opencode`.
 
 ## Setup
 
@@ -68,6 +68,7 @@ source .venv/bin/activate
 python run.py            # default: claude
 python run.py codex      # use codex
 python run.py claude     # explicit claude
+python run.py opencode   # use opencode
 ```
 
 The app starts at `http://localhost:8000` and opens your browser automatically.
@@ -111,6 +112,7 @@ stock-selector/
 │   └── analysis/
 │       ├── claude.py          # Claude CLI wrapper
 │       ├── codex.py           # Codex CLI wrapper
+│       ├── opencode.py        # Opencode CLI wrapper
 │       ├── prompts.py         # Prompt templates per signal category
 │       ├── scoring.py         # Weighted scoring and recommendation logic
 │       └── engine.py          # Analysis orchestrator (scrape → LLM → DB)
@@ -132,7 +134,7 @@ stock-selector/
 - **Backend:** FastAPI, uvicorn, aiosqlite, Pydantic
 - **Frontend:** Jinja2 templates, HTMX, Tailwind CSS (CDN), Chart.js
 - **Scraping:** httpx, BeautifulSoup, lxml
-- **LLM:** Claude Code CLI (default) or Codex CLI
+- **LLM:** Claude Code CLI (default), Codex CLI, or Opencode CLI
 - **Database:** SQLite (stored in `data/stock_selector.db`)
 
 ## Running Tests
@@ -175,6 +177,7 @@ By default the app uses Claude when `run.py` is invoked without args. To switch 
 python run.py            # default: claude
 python run.py codex      # use codex
 python run.py claude     # explicit claude
+python run.py opencode   # use opencode
 ```
 
 By default, Codex uses `codex exec --json {prompt}`. You can override:
@@ -183,8 +186,16 @@ By default, Codex uses `codex exec --json {prompt}`. You can override:
 # Use Claude instead
 export STOCK_SELECTOR_LLM=claude
 
+# Use Opencode instead
+export STOCK_SELECTOR_LLM=opencode
+
 # Customize Codex CLI invocation (prompt via stdin unless {prompt} is used)
 export CODEX_CMD='codex exec --json {prompt}'
 # Example with prompt substitution and extra flags
 export CODEX_CMD='codex exec --json --some-flag {prompt}'
+
+# Customize Opencode CLI invocation
+export OPENCODE_CMD='opencode run {prompt} --format json'
+# Example with extra flags
+export OPENCODE_CMD='opencode run {prompt} --format json --model gpt-4'
 ```

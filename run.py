@@ -28,8 +28,8 @@ def main():
 
     # LLM backend
     if args.llm:
-        if args.llm.lower() not in {"codex", "claude"}:
-            raise SystemExit("LLM must be 'codex' or 'claude'")
+        if args.llm.lower() not in {"codex", "claude", "opencode"}:
+            raise SystemExit("Supported LLM model CLI provider 'codex' or 'claude' or 'opencode'")
         os.environ["STOCK_SELECTOR_LLM"] = args.llm.lower()
     else:
         os.environ.setdefault("STOCK_SELECTOR_LLM", "claude")
