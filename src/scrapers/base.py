@@ -26,18 +26,17 @@ class BaseScraper:
 
     async def fetch(self, url: str) -> str:
         domain = urlparse(url).netloc
-        if domain not in self._domain_locks:
-            self._domain_locks[domain] = asyncio.Lock()
+        lock = self._domain_locks.setdefault(domain, asyncio.Lock())
 
-        async with self._domain_locks[domain]:
+        async with lock:
             elapsed = time.monotonic() - self._last_request.get(domain, 0.0)
             if elapsed < self._min_interval:
                 await asyncio.sleep(self._min_interval - elapsed)
             self._last_request[domain] = time.monotonic()
 
-        response = await self.client.get(url)
-        response.raise_for_status()
-        return response.text
+            response = await self.client.get(url)
+            response.raise_for_status()
+            return response.text
 
     def parse_html(self, html: str) -> BeautifulSoup:
         return BeautifulSoup(html, "lxml")
