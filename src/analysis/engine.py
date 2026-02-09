@@ -26,10 +26,12 @@ class AnalysisEngine:
             self.llm = CodexCLI()
         else:
             raise ValueError("STOCK_SELECTOR_LLM must be 'codex' or 'claude'")
-        self.finviz = FinvizScraper()
-        self.openinsider = OpenInsiderScraper()
-        self.news = NewsScraper()
-        self.sector = SectorScraper()
+        cache_get = db.get_cached_scrape
+        cache_save = db.save_scrape_cache
+        self.finviz = FinvizScraper(cache_get=cache_get, cache_save=cache_save)
+        self.openinsider = OpenInsiderScraper(cache_get=cache_get, cache_save=cache_save)
+        self.news = NewsScraper(cache_get=cache_get, cache_save=cache_save)
+        self.sector = SectorScraper(cache_get=cache_get, cache_save=cache_save)
 
     async def analyze_ticker(self, symbol: str) -> AsyncGenerator[RefreshProgress, None]:
         """Run full analysis for a ticker, yielding progress updates."""
