@@ -4,6 +4,8 @@ import logging
 import shlex
 import shutil
 
+from src.analysis.llm_base import LLMProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -12,7 +14,7 @@ def _resolve_opencode_bin() -> str:
     return shutil.which("opencode") or "opencode"
 
 
-class OpencodeCLI:
+class OpencodeCLI(LLMProvider):
     """Wrapper around the Opencode CLI for LLM analysis."""
 
     def __init__(self, cmd_template: str | None = None):
@@ -72,31 +74,6 @@ class OpencodeCLI:
         except Exception as exc:
             logger.error("Opencode CLI exception: %s", exc)
             return {"error": str(exc)}
-
-    def _parse_response(self, text: str) -> dict:
-        """Extract JSON from Opencode output, handling markdown code blocks."""
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        if "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        return {"narrative": text, "parse_error": True}
 
     def _extract_json_stream_text(self, text: str) -> tuple[str, bool]:
         """Handle Opencode --format output by extracting the text message content."""

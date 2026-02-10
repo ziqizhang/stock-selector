@@ -5,6 +5,8 @@ import os
 import shlex
 import shutil
 
+from src.analysis.llm_base import LLMProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,7 +15,7 @@ def _resolve_codex_bin() -> str:
     return os.environ.get("CODEX_BIN") or shutil.which("codex") or "codex"
 
 
-class CodexCLI:
+class CodexCLI(LLMProvider):
     """Wrapper around the Codex CLI for LLM analysis."""
 
     def __init__(self, cmd_template: str | None = None):
@@ -76,31 +78,6 @@ class CodexCLI:
         except Exception as exc:
             logger.error("Codex CLI exception: %s", exc)
             return {"error": str(exc)}
-
-    def _parse_response(self, text: str) -> dict:
-        """Extract JSON from Codex output, handling markdown code blocks."""
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        if "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        return {"narrative": text, "parse_error": True}
 
     _STREAM_EVENT_TYPES = frozenset({
         "thread.started", "turn.started", "item.completed", "turn.completed",

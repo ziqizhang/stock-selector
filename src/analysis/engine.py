@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ from src.scrapers.openinsider import OpenInsiderScraper
 from src.scrapers.investegate import InvestegateScraper
 from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
+from src.analysis.llm_base import LLMProvider
 from src.analysis.claude import ClaudeCLI
 from src.analysis.codex import CodexCLI
 from src.analysis.opencode import OpencodeCLI
@@ -47,18 +49,23 @@ def _validate_signal_result(result: dict) -> dict:
     return validated
 
 
+def create_llm_provider(backend: str) -> LLMProvider:
+    """Create an LLM provider instance by backend name."""
+    if backend == "claude":
+        return ClaudeCLI()
+    elif backend == "codex":
+        return CodexCLI()
+    elif backend == "opencode":
+        return OpencodeCLI()
+    else:
+        raise ValueError(f"STOCK_SELECTOR_LLM must be 'codex', 'claude', or 'opencode', got '{backend}'")
+
+
 class AnalysisEngine:
     def __init__(self, db: Database, data_provider: DataProvider | None = None):
         self.db = db
         backend = os.environ.get("STOCK_SELECTOR_LLM", "codex").lower()
-        if backend == "claude":
-            self.llm = ClaudeCLI()
-        elif backend == "codex":
-            self.llm = CodexCLI()
-        elif backend == "opencode":
-            self.llm = OpencodeCLI()
-        else:
-            raise ValueError("STOCK_SELECTOR_LLM must be 'codex', 'claude', or 'opencode'")
+        self.llm: LLMProvider = create_llm_provider(backend)
         cache_get = db.get_cached_scrape
         cache_save = db.save_scrape_cache
         if data_provider is not None:
@@ -166,65 +173,105 @@ class AnalysisEngine:
         ]
 
         for category, prompt_fn, data in categories:
-            yield RefreshProgress(symbol=symbol, step=f"Analyzing {category}...", category=category)
-            prompt = prompt_fn(symbol, data)
-            result = _validate_signal_result(await self.llm.analyze(prompt))
-            score = result["score"]
-            confidence = result["confidence"]
-            cat_narrative = result.get("narrative", "Analysis unavailable.")
+            input_hash = hashlib.sha256(
+                json.dumps(data, sort_keys=True, default=str).encode()
+            ).hexdigest()
+            cached = await self.db.get_cached_analysis(symbol, category, input_hash)
+            if cached:
+                yield RefreshProgress(symbol=symbol, step=f"Using cached {category}...", category=category)
+                score = cached["score"]
+                confidence = cached["confidence"]
+                cat_narrative = cached.get("narrative", "Analysis unavailable.")
+            else:
+                yield RefreshProgress(symbol=symbol, step=f"Analyzing {category}...", category=category)
+                prompt = prompt_fn(symbol, data)
+                result = _validate_signal_result(await self.llm.analyze(prompt))
+                score = result["score"]
+                confidence = result["confidence"]
+                cat_narrative = result.get("narrative", "Analysis unavailable.")
 
-            # For technicals, append support/resistance/entry info to narrative
-            if category == "technicals":
-                extras = []
-                if result.get("support_levels"):
-                    extras.append("**Support Levels:** " + " | ".join(result["support_levels"]))
-                if result.get("resistance_levels"):
-                    extras.append("**Resistance Levels:** " + " | ".join(result["resistance_levels"]))
-                if result.get("entry_price"):
-                    extras.append("**Suggested Entry:** " + result["entry_price"])
-                if result.get("stop_loss"):
-                    extras.append("**Stop-Loss:** " + result["stop_loss"])
-                if extras:
-                    cat_narrative += "\n\n" + "\n\n".join(extras)
+                # For technicals, append support/resistance/entry info to narrative
+                if category == "technicals":
+                    extras = []
+                    if result.get("support_levels"):
+                        extras.append("**Support Levels:** " + " | ".join(result["support_levels"]))
+                    if result.get("resistance_levels"):
+                        extras.append("**Resistance Levels:** " + " | ".join(result["resistance_levels"]))
+                    if result.get("entry_price"):
+                        extras.append("**Suggested Entry:** " + result["entry_price"])
+                    if result.get("stop_loss"):
+                        extras.append("**Stop-Loss:** " + result["stop_loss"])
+                    if extras:
+                        cat_narrative += "\n\n" + "\n\n".join(extras)
+
+                await self.db.save_analysis(
+                    symbol=symbol, category=category, score=score,
+                    confidence=confidence, narrative=cat_narrative,
+                    raw_data=json.dumps(data, default=str),
+                    input_hash=input_hash,
+                )
 
             signal_results[category] = {"score": score, "confidence": confidence, "narrative": cat_narrative}
-            await self.db.save_analysis(
-                symbol=symbol, category=category, score=score,
-                confidence=confidence, narrative=cat_narrative,
-                raw_data=json.dumps(data, default=str),
-            )
 
         # Sector context (needs sector param)
-        yield RefreshProgress(symbol=symbol, step="Analyzing sector context...", category="sector_context")
-        sector_prompt = prompts.sector_prompt(symbol, sector or "Unknown", sector_data)
-        result = _validate_signal_result(await self.llm.analyze(sector_prompt))
-        signal_results["sector_context"] = {
-            "score": result["score"],
-            "confidence": result["confidence"],
-            "narrative": result.get("narrative", ""),
-        }
-        await self.db.save_analysis(
-            symbol=symbol, category="sector_context",
-            score=result["score"], confidence=result["confidence"],
-            narrative=result.get("narrative", ""), raw_data=json.dumps(sector_data, default=str),
-        )
+        sector_hash = hashlib.sha256(
+            json.dumps(sector_data, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        cached_sector = await self.db.get_cached_analysis(symbol, "sector_context", sector_hash)
+        if cached_sector:
+            yield RefreshProgress(symbol=symbol, step="Using cached sector context...", category="sector_context")
+            signal_results["sector_context"] = {
+                "score": cached_sector["score"],
+                "confidence": cached_sector["confidence"],
+                "narrative": cached_sector.get("narrative", ""),
+            }
+        else:
+            yield RefreshProgress(symbol=symbol, step="Analyzing sector context...", category="sector_context")
+            sector_prompt = prompts.sector_prompt(symbol, sector or "Unknown", sector_data)
+            result = _validate_signal_result(await self.llm.analyze(sector_prompt))
+            signal_results["sector_context"] = {
+                "score": result["score"],
+                "confidence": result["confidence"],
+                "narrative": result.get("narrative", ""),
+            }
+            await self.db.save_analysis(
+                symbol=symbol, category="sector_context",
+                score=result["score"], confidence=result["confidence"],
+                narrative=result.get("narrative", ""), raw_data=json.dumps(sector_data, default=str),
+                input_hash=sector_hash,
+            )
 
         # Risk assessment
-        yield RefreshProgress(symbol=symbol, step="Analyzing risk...", category="risk_assessment")
-        risk_prompt_text = prompts.risk_prompt(symbol, all_scraped)
-        result = _validate_signal_result(await self.llm.analyze(risk_prompt_text))
-        signal_results["risk_assessment"] = {
-            "score": result["score"],
-            "confidence": result["confidence"],
-            "narrative": result.get("narrative", ""),
-            "bull_case": result.get("bull_case", ""),
-            "bear_case": result.get("bear_case", ""),
-        }
-        await self.db.save_analysis(
-            symbol=symbol, category="risk_assessment",
-            score=result["score"], confidence=result["confidence"],
-            narrative=result.get("narrative", ""), raw_data=json.dumps(all_scraped, default=str),
-        )
+        risk_hash = hashlib.sha256(
+            json.dumps(all_scraped, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        cached_risk = await self.db.get_cached_analysis(symbol, "risk_assessment", risk_hash)
+        if cached_risk:
+            yield RefreshProgress(symbol=symbol, step="Using cached risk assessment...", category="risk_assessment")
+            signal_results["risk_assessment"] = {
+                "score": cached_risk["score"],
+                "confidence": cached_risk["confidence"],
+                "narrative": cached_risk.get("narrative", ""),
+                "bull_case": "",
+                "bear_case": "",
+            }
+        else:
+            yield RefreshProgress(symbol=symbol, step="Analyzing risk...", category="risk_assessment")
+            risk_prompt_text = prompts.risk_prompt(symbol, all_scraped)
+            result = _validate_signal_result(await self.llm.analyze(risk_prompt_text))
+            signal_results["risk_assessment"] = {
+                "score": result["score"],
+                "confidence": result["confidence"],
+                "narrative": result.get("narrative", ""),
+                "bull_case": result.get("bull_case", ""),
+                "bear_case": result.get("bear_case", ""),
+            }
+            await self.db.save_analysis(
+                symbol=symbol, category="risk_assessment",
+                score=result["score"], confidence=result["confidence"],
+                narrative=result.get("narrative", ""), raw_data=json.dumps(all_scraped, default=str),
+                input_hash=risk_hash,
+            )
 
         # 6. Synthesis
         yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)

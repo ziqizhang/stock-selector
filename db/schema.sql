@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     confidence TEXT NOT NULL,
     narrative TEXT,
     raw_data TEXT,
+    input_hash TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

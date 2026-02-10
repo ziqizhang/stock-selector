@@ -70,14 +70,27 @@ class Database:
 
     async def save_analysis(
         self, symbol: str, category: str, score: float, confidence: str,
-        narrative: str, raw_data: str,
+        narrative: str, raw_data: str, input_hash: str | None = None,
     ):
         await self.db.execute(
-            """INSERT INTO analyses (symbol, category, score, confidence, narrative, raw_data)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (symbol.upper(), category, score, confidence, narrative, raw_data),
+            """INSERT INTO analyses (symbol, category, score, confidence, narrative, raw_data, input_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (symbol.upper(), category, score, confidence, narrative, raw_data, input_hash),
         )
         await self.db.commit()
+
+    async def get_cached_analysis(
+        self, symbol: str, category: str, input_hash: str,
+    ) -> dict | None:
+        cursor = await self.db.execute(
+            """SELECT * FROM analyses
+               WHERE symbol = ? AND category = ? AND input_hash = ?
+                 AND created_at > datetime('now', '-24 hours')
+               ORDER BY created_at DESC LIMIT 1""",
+            (symbol.upper(), category, input_hash),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
     async def get_analyses(self, symbol: str, limit: int = 50) -> list[dict]:
         cursor = await self.db.execute(

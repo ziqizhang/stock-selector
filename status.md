@@ -41,7 +41,7 @@ The app starts at http://localhost:8000 and opens a browser automatically.
 
 | Variable | Default | Options | Description |
 |---|---|---|---|
-| `STOCK_SELECTOR_LLM` | `claude` (via run.py) | `claude`, `codex` | LLM backend for analysis |
+| `STOCK_SELECTOR_LLM` | `claude` (via run.py) | `claude`, `codex`, `opencode` | LLM backend for analysis |
 | `STOCK_SELECTOR_DATA_SOURCE` | `yfinance` | `yfinance`, `finviz` | Primary data provider |
 | `CODEX_CMD` | `codex exec --json {prompt}` | any shell command | Custom Codex CLI invocation |
 | `CODEX_BIN` | auto-detected | path to binary | Override Codex binary location |
@@ -56,7 +56,7 @@ python run.py claude --data-source finviz  # Claude + Finviz
 ## Running Tests
 
 ```bash
-pytest tests/ -v        # all 103 tests
+pytest tests/ -v        # all tests
 pytest tests/ -v -x     # stop on first failure
 ```
 
@@ -73,8 +73,10 @@ src/
   db.py                 # async SQLite via aiosqlite
   analysis/
     engine.py           # orchestrates scraping + LLM analysis
-    claude.py           # Claude CLI wrapper
-    codex.py            # Codex CLI wrapper
+    llm_base.py         # LLMProvider ABC with shared _parse_response()
+    claude.py           # Claude CLI wrapper (extends LLMProvider)
+    codex.py            # Codex CLI wrapper (extends LLMProvider)
+    opencode.py         # Opencode CLI wrapper (extends LLMProvider)
     prompts.py          # LLM prompt templates per signal category
     scoring.py          # weighted score aggregation
     indicators.py       # SMA, EMA, RSI, ATR, Bollinger Bands
@@ -100,8 +102,8 @@ alembic/                # DB migrations
    - Fetches fundamentals, technicals, analyst data, news from yfinance
    - Fetches insider data from **OpenInsider** (US) or **Investegate** (UK)
    - Fetches sector context from **FinViz** (US only) + Google News
-   - Runs 7 LLM analyses (fundamentals, analyst, insider, technicals, sentiment, sector, risk)
-   - Synthesizes an overall score and recommendation
+   - Runs 7 LLM analyses (fundamentals, analyst, insider, technicals, sentiment, sector, risk) — cached for 24h if input data unchanged
+   - Synthesizes an overall score and recommendation (always re-runs)
 
 ## Market Support
 
@@ -116,6 +118,7 @@ Users select market (US/UK) when adding a ticker. The engine auto-routes to the 
 
 | Date | Commit | What changed |
 |---|---|---|
+| 2026-02-10 | (pending) | **Issues #10, #9, #13, #11**: Stability & coverage sprint. Google News RSS migration (feedparser), LLMProvider ABC with shared `_parse_response()`, scoring + engine integration tests, LLM response caching with 24h TTL via input_hash. 144 tests passing (2 pre-existing Investegate mock failures). |
 | 2026-02-10 | `ff225d8` | **Issue #21 follow-up**: Replace hardcoded UK symbol mappings with dynamic `yf.Search()` API. Removed `_UK_SUFFIX_PATTERNS`, `_UK_EXCEPTION_MAPPINGS`, and `_try_uk_patterns()`; added `_search_symbol()` for fully dynamic LSE resolution. Fixed broken test imports. 101/103 tests passing (2 pre-existing Investegate mock failures). |
 | 2026-02-09 | `504b3ba` | **Issue #8**: UK market support - Investegate scraper, UK sector ETFs, market-aware engine routing, dashboard market dropdown. Fixed Codex CLI stream detection and Alembic logger interference. 75/75 tests passing. |
 | 2026-02-09 | `99820e0` | **Issue #7**: yfinance data provider, technical indicators, Alembic migrations. |
@@ -125,7 +128,5 @@ Users select market (US/UK) when adding a ticker. The engine auto-routes to the 
 See [open issues](https://github.com/ziqizhang/stock-selector/issues) for the full backlog. Key items:
 
 - **#20** — Replace web scraping with official APIs where available
-- **#9** — LLM provider abstraction layer
-- **#10** — Google News scraping resilience
-- **#11** — Cache LLM responses when scraped data hasn't changed
-- **#13** — Improve test coverage
+- **#24** — Extend sector list with more industry categories (grocery, mining, etc.)
+- **#12** — User-configurable scoring weights

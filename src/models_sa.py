@@ -45,6 +45,7 @@ analyses = Table(
     Column("confidence", Text, nullable=False),
     Column("narrative", Text),
     Column("raw_data", Text),
+    Column("input_hash", Text),
     Column("created_at", DateTime, server_default=text("CURRENT_TIMESTAMP")),
 )
 

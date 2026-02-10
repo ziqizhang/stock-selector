@@ -1,8 +1,9 @@
 import asyncio
-import json
 import logging
 import shutil
 from pathlib import Path
+
+from src.analysis.llm_base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def _find_claude() -> str:
 CLAUDE_BIN = _find_claude()
 
 
-class ClaudeCLI:
+class ClaudeCLI(LLMProvider):
     """Wrapper around the Claude Code CLI for LLM analysis."""
 
     async def analyze(self, prompt: str) -> dict:
@@ -51,31 +52,3 @@ class ClaudeCLI:
         except Exception as e:
             logger.error(f"Claude CLI exception: {e}")
             return {"error": str(e)}
-
-    def _parse_response(self, text: str) -> dict:
-        """Extract JSON from Claude's response, handling markdown code blocks."""
-        # Try direct JSON parse first
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from markdown code block
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        if "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            try:
-                return json.loads(text[start:end].strip())
-            except json.JSONDecodeError:
-                pass
-
-        # Return as narrative if not JSON
-        return {"narrative": text, "parse_error": True}
