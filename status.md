@@ -56,7 +56,7 @@ python run.py claude --data-source finviz  # Claude + Finviz
 ## Running Tests
 
 ```bash
-pytest tests/ -v        # all 75 tests
+pytest tests/ -v        # all 103 tests
 pytest tests/ -v -x     # stop on first failure
 ```
 
@@ -96,7 +96,7 @@ alembic/                # DB migrations
 
 1. User adds a ticker via the dashboard (symbol, name, market, sector)
 2. On refresh, `AnalysisEngine.analyze_ticker()` runs:
-   - Resolves the symbol via yfinance (e.g. `VOD` -> `VOD.L` for UK)
+   - Resolves the symbol via yfinance Search API (e.g. `HSBC` -> `HSBA.L` for UK)
    - Fetches fundamentals, technicals, analyst data, news from yfinance
    - Fetches insider data from **OpenInsider** (US) or **Investegate** (UK)
    - Fetches sector context from **FinViz** (US only) + Google News
@@ -112,26 +112,11 @@ alembic/                # DB migrations
 
 Users select market (US/UK) when adding a ticker. The engine auto-routes to the correct data sources.
 
-### Known Bug: UK Ticker Symbol Mismatch (#21)
-
-Many UK companies use a different ticker symbol on the LSE (used by Yahoo Finance / yfinance) than what appears on Google Finance, the financial press, or the company's own branding. Our `resolve_symbol()` currently just appends `.L` to whatever the user types, which fails for these cases:
-
-| What users type | What Google Finance shows | Actual LSE symbol (yfinance) |
-|---|---|---|
-| HSBC | HSBC | `HSBA.L` |
-| RELX | RELX | `REL.L` |
-| VOD | VOD | `VOD.L` (this one works) |
-
-When the LSE symbol doesn't match, yfinance falls back to the US-listed version (e.g. NYSE ADR), so the engine thinks it's a US stock. This means insider data routes to OpenInsider (which has nothing for a UK company) instead of Investegate, resulting in null insider activity.
-
-**Workaround**: Enter the actual LSE ticker code instead of the common name (e.g. `HSBA` not `HSBC`, `REL` not `RELX`). You can look up the LSE code on [Yahoo Finance](https://finance.yahoo.com/) by searching the company name and checking for the `.L` suffix.
-
-**Fix needed**: Smarter symbol resolution — see #21.
-
 ## Recent Changes
 
 | Date | Commit | What changed |
 |---|---|---|
+| 2026-02-10 | `ff225d8` | **Issue #21 follow-up**: Replace hardcoded UK symbol mappings with dynamic `yf.Search()` API. Removed `_UK_SUFFIX_PATTERNS`, `_UK_EXCEPTION_MAPPINGS`, and `_try_uk_patterns()`; added `_search_symbol()` for fully dynamic LSE resolution. Fixed broken test imports. 101/103 tests passing (2 pre-existing Investegate mock failures). |
 | 2026-02-09 | `504b3ba` | **Issue #8**: UK market support - Investegate scraper, UK sector ETFs, market-aware engine routing, dashboard market dropdown. Fixed Codex CLI stream detection and Alembic logger interference. 75/75 tests passing. |
 | 2026-02-09 | `99820e0` | **Issue #7**: yfinance data provider, technical indicators, Alembic migrations. |
 
@@ -139,7 +124,6 @@ When the LSE symbol doesn't match, yfinance falls back to the US-listed version 
 
 See [open issues](https://github.com/ziqizhang/stock-selector/issues) for the full backlog. Key items:
 
-- **#21** — UK insider activity missing due to LSE symbol mismatch (see above)
 - **#20** — Replace web scraping with official APIs where available
 - **#9** — LLM provider abstraction layer
 - **#10** — Google News scraping resilience
