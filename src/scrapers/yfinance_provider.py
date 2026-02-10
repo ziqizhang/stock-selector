@@ -13,32 +13,10 @@ from src.analysis.indicators import sma, rsi, atr, bollinger_bands
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Hybrid UK symbol resolution patterns
+# UK exchange identifiers for yfinance Search filtering
 # ---------------------------------------------------------------------------
 
-# Common UK LSE suffix patterns to try dynamically
-_UK_SUFFIX_PATTERNS = [
-    ".L",   # Most common LSE suffix
-    "",      # Some UK stocks don't use suffix
-    ".LN",   # Alternative LSE suffix
-    ".",     # For symbols like BP
-]
-
-# Small exception mapping only for edge cases where symbol root completely changes
-_UK_EXCEPTION_MAPPINGS: dict[str, str] = {
-    "HSBC": "HSBA.L",
-    "BP": "BP.",      # Special case - uses trailing dot
-    "RELX": "REL.L",
-    "LLOYDS": "LLOY.L",
-    "SHEL": "SHEL.L",
-    "ULVR": "ULVR.L",
-    "BT": "BT.A.L",
-    "TUI": "TUI.L",
-    "RR": "RR.L",
-    "BAE": "BAES.L",
-    "ITV": "ITV.L",
-    "WTW": "WTW.L",
-}
+_UK_EXCHANGES: set[str] = {"LSE"}
 
 # ---------------------------------------------------------------------------
 # Mapping helpers — translate yfinance Ticker.info keys → our dict keys
@@ -151,11 +129,11 @@ class YFinanceProvider:
         return None
 
     def resolve_symbol(self, raw_symbol: str, preferred_market: str | None = None) -> tuple[str, str]:
-        """Try *raw_symbol* as-is, then with multiple UK patterns dynamically.
+        """Resolve *raw_symbol* via probing and yfinance Search.
 
         Returns ``(resolved_symbol, market)`` where market is ``"US"``
         or ``"UK"``.  Raises ``ValueError`` if the ticker cannot be found.
-        
+
         Args:
             raw_symbol: The symbol to resolve
             preferred_market: If "UK", prioritize UK symbols even if US symbol exists
@@ -163,70 +141,52 @@ class YFinanceProvider:
         if raw_symbol in self._resolved:
             return self._resolved[raw_symbol]
 
-        # Normalize symbol for pattern matching
-        normalized = raw_symbol.rstrip(".").upper()
-        
-        # If UK is preferred, try UK patterns first
+        # If UK is preferred, search LSE first
         if preferred_market == "UK":
-            uk_result = self._try_uk_patterns(normalized)
+            uk_result = self._search_symbol(raw_symbol, "LSE")
             if uk_result:
-                uk_symbol, uk_info = uk_result
+                uk_symbol, _ = uk_result
                 self._resolved[raw_symbol] = (uk_symbol, "UK")
                 return uk_symbol, "UK"
 
-        # Try as-is (covers US tickers and other exchanges)
+        # Try as-is (covers US tickers and already-suffixed UK tickers)
         info = self._probe_symbol(raw_symbol)
         if info:
-            market = "UK" if raw_symbol.endswith((".L", ".LN", ".")) else "US"
+            market = "UK" if raw_symbol.endswith((".L", ".LN")) else "US"
             self._resolved[raw_symbol] = (raw_symbol, market)
             return raw_symbol, market
 
-        # If preferred market isn't UK or UK patterns failed, try UK patterns now
+        # If we haven't searched UK yet, try now as a fallback
         if preferred_market != "UK":
-            uk_result = self._try_uk_patterns(normalized)
+            uk_result = self._search_symbol(raw_symbol, "LSE")
             if uk_result:
-                uk_symbol, uk_info = uk_result
+                uk_symbol, _ = uk_result
                 self._resolved[raw_symbol] = (uk_symbol, "UK")
                 return uk_symbol, "UK"
 
         raise ValueError(f"Ticker '{raw_symbol}' not found on US or UK exchanges")
 
-    def _try_uk_patterns(self, symbol: str) -> tuple[str, dict] | None:
-        """Try hybrid UK LSE resolution for a symbol.
-        
-        Returns (resolved_symbol, info_dict) or None if no UK variant found.
-        
-        Strategy:
-        1. Check exception mappings for edge cases (HSBC->HSBA.L)
-        2. Try dynamic suffix patterns for common cases (VOD->VOD.L)
+    def _search_symbol(self, query: str, exchange: str) -> tuple[str, dict] | None:
+        """Search for *query* on *exchange* using ``yf.Search``.
+
+        Returns ``(symbol, info_dict)`` for the first match whose
+        ``_probe_symbol`` succeeds, or ``None``.
         """
-        # 1. Check exception mappings first (edge cases where symbol root completely changes)
-        if symbol in _UK_EXCEPTION_MAPPINGS:
-            mapped_symbol = _UK_EXCEPTION_MAPPINGS[symbol]
-            info = self._probe_symbol(mapped_symbol)
-            if info:
-                logger.debug(f"Found UK symbol via exception mapping: {symbol} -> {mapped_symbol}")
-                return mapped_symbol, info
-        
-        # 2. Try dynamic suffix patterns for common cases
-        for suffix in _UK_SUFFIX_PATTERNS:
-            uk_symbol = f"{symbol}{suffix}"
-            info = self._probe_symbol(uk_symbol)
-            if info:
-                logger.debug(f"Found UK symbol via pattern: {symbol} -> {uk_symbol}")
-                return uk_symbol, info
-        
-        # 3. Special handling for trailing dot symbols (e.g. BP -> BP.)
-        if symbol.endswith("."):
-            # Remove trailing dot and try patterns again
-            clean_symbol = symbol.rstrip(".")
-            for suffix in _UK_SUFFIX_PATTERNS:
-                uk_symbol = f"{clean_symbol}{suffix}"
-                info = self._probe_symbol(uk_symbol)
+        try:
+            results = yf.Search(query)
+            quotes = getattr(results, "quotes", None) or []
+            for quote in quotes:
+                if quote.get("exchange") != exchange:
+                    continue
+                symbol = quote.get("symbol")
+                if not symbol:
+                    continue
+                info = self._probe_symbol(symbol)
                 if info:
-                    logger.debug(f"Found UK symbol with dot handling: {symbol} -> {uk_symbol}")
-                    return uk_symbol, info
-        
+                    logger.debug("Search resolved %s -> %s (exchange=%s)", query, symbol, exchange)
+                    return symbol, info
+        except Exception:
+            logger.debug("yf.Search(%r) failed", query, exc_info=True)
         return None
 
     def _ensure_cached(self, symbol: str) -> dict:

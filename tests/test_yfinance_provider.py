@@ -250,21 +250,13 @@ def test_resolve_symbol_uk_with_suffix():
 
 
 def test_resolve_symbol_uk_auto_suffix():
-    """When bare symbol fails, .L suffix should be tried."""
+    """When bare symbol fails, yfinance Search should find the UK variant."""
     p = YFinanceProvider()
 
-    call_count = {"n": 0}
-
-    def mock_get(sym):
-        call_count["n"] += 1
-        t = MagicMock()
-        if sym.endswith(".L"):
-            t.info = {"regularMarketPrice": 650.0}
-        else:
-            t.info = {}  # no market price → invalid
-        return t
-
-    p._get_ticker = mock_get
+    # Bare symbol probe fails
+    p._probe_symbol = lambda sym: None
+    # Search finds HSBA.L on LSE
+    p._search_symbol = lambda query, exchange: ("HSBA.L", {"regularMarketPrice": 650.0})
 
     resolved, market = p.resolve_symbol("HSBA")
     assert resolved == "HSBA.L"
@@ -276,6 +268,7 @@ def test_resolve_symbol_not_found():
     mock_ticker = MagicMock()
     mock_ticker.info = {}
     p._get_ticker = MagicMock(return_value=mock_ticker)
+    p._search_symbol = lambda query, exchange: None
 
     with pytest.raises(ValueError, match="not found"):
         p.resolve_symbol("XXXYYYZZZ")
