@@ -348,5 +348,29 @@ class YFinanceProvider:
         else:
             self._cache.pop(symbol, None)
 
+    async def get_sector_info(self, symbol: str) -> dict[str, str | None]:
+        """Fetch sector and industry information for a symbol.
+        
+        Returns a dict with 'sector', 'sector_key', 'industry', 'industry_key'.
+        All values may be None if not available.
+        """
+        try:
+            ticker = self._get_ticker(symbol)
+            info = ticker.info or {}
+            return {
+                "sector": info.get("sector"),
+                "sector_key": info.get("sectorKey"),
+                "industry": info.get("industry"),
+                "industry_key": info.get("industryKey"),
+            }
+        except Exception as e:
+            logger.warning("Failed to fetch sector info for %s: %s", symbol, e)
+            return {
+                "sector": None,
+                "sector_key": None,
+                "industry": None,
+                "industry_key": None,
+            }
+
     async def close(self) -> None:
         self._cache.clear()

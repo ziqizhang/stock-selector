@@ -5,6 +5,8 @@ This is a personal stock tracker and analysis dashboard that helps decide whethe
 ## Features
 
 - **Watchlist management** — Add and remove stock tickers with symbol, name, and sector
+- **Auto company lookup** — Enter a stock symbol and the app automatically fetches the company name and sector from Yahoo Finance (no manual entry needed!)
+- **Smart symbol resolution** — Automatically resolves symbols to correct exchange formats (e.g., `HSBC` → `HSBA.L` for UK stocks)
 - **7-signal analysis** — Each ticker is analyzed across seven categories, each scored from -10 (strong sell) to +10 (strong buy):
   - Fundamentals (P/E, revenue, margins, debt)
   - Analyst consensus (price targets, buy/hold/sell ratings)
@@ -20,10 +22,11 @@ This is a personal stock tracker and analysis dashboard that helps decide whethe
 
 ## Data Sources
 
-All data is obtained via web scraping (no API keys required):
+All data is obtained via web scraping and public APIs (no API keys required):
 
 | Source | Data |
 |--------|------|
+| Yahoo Finance (yfinance) | Company names, sectors, industries, and symbol resolution |
 | Finviz | Fundamentals, technicals, analyst data, stock news |
 | OpenInsider | Insider trading activity |
 | Google News | General news sentiment |
@@ -75,7 +78,19 @@ The app starts at `http://localhost:8000` and opens your browser automatically.
 
 ### Add tickers
 
-On the dashboard, fill in the symbol (e.g. `AAPL`), company name, and sector, then click **Add Ticker**.
+On the dashboard, simply enter the stock symbol (e.g. `AAPL`, `MSFT`, `GOOG`) and press **Tab** or click outside the field. The app will automatically:
+
+1. **Look up the company name** from Yahoo Finance and auto-fill the Name field
+2. **Detect the sector** (Technology, Healthcare, Financial Services, etc.) automatically
+3. **Resolve the correct market** (US or UK) and symbol suffix (e.g., `HSBA.L` for UK stocks)
+
+You can edit the auto-filled name before submitting if needed. Then click **Add Ticker** to add it to your watchlist.
+
+**Examples:**
+- Enter `AAPL` → Auto-fills "Apple Inc." with sector "Technology"
+- Enter `GOOG` → Auto-fills "Alphabet Inc." with sector "Communication Services"  
+- Enter `HSBC` (with UK market) → Resolves to `HSBA.L`, auto-fills "HSBC Holdings plc" with sector "Financial Services"
+- Enter `BP` (with UK market) → Resolves to `BP.L`, auto-fills "BP p.l.c." with sector "Energy"
 
 ### Run analysis
 

@@ -13,39 +13,28 @@
 {% endif %}
 
 <div class="mb-6 bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-    <form action="/tickers" method="post" class="flex gap-3 items-end">
+    <form action="/tickers" method="post" class="flex gap-3 items-end" id="add-ticker-form">
         <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Symbol</label>
-            <input type="text" name="symbol" required placeholder="AAPL"
+            <input type="text" name="symbol" id="ticker-symbol" required placeholder="AAPL"
                    class="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md text-sm w-28 uppercase bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60">
         </div>
-        <div>
+        <div class="relative">
             <label class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Name</label>
-            <input type="text" name="name" required placeholder="Apple Inc."
+            <input type="text" name="name" id="ticker-name" required placeholder="Apple Inc."
                    class="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md text-sm w-48 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60">
+            <div id="name-loading" class="hidden absolute right-2 top-8">
+                <svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
         </div>
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Market</label>
-            <select name="market" class="px-3 py-2 border rounded-md text-sm w-20">
+            <label class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Market</label>
+            <select name="market" id="ticker-market" class="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md text-sm w-20 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
                 <option value="US">US</option>
                 <option value="UK">UK</option>
-            </select>
-        </div>
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Sector</label>
-            <select name="sector" class="px-3 py-2 border rounded-md text-sm w-48">
-                <option value="">Select sector...</option>
-                <option>Technology</option>
-                <option>Healthcare</option>
-                <option>Financial</option>
-                <option>Consumer Cyclical</option>
-                <option>Consumer Defensive</option>
-                <option>Energy</option>
-                <option>Industrials</option>
-                <option>Materials</option>
-                <option>Real Estate</option>
-                <option>Utilities</option>
-                <option>Communication Services</option>
             </select>
         </div>
         <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/60 dark:focus:ring-blue-400/70">
@@ -149,4 +138,65 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Inline auto-fill script for debugging
+(function() {
+    console.log('Inline auto-fill script running');
+    
+    function initAutofill() {
+        const symbolInput = document.getElementById('ticker-symbol');
+        const nameInput = document.getElementById('ticker-name');
+        const marketSelect = document.getElementById('ticker-market');
+        
+        console.log('Elements found:', { symbol: !!symbolInput, name: !!nameInput, market: !!marketSelect });
+        
+        if (!symbolInput || !nameInput) {
+            console.error('Could not find form elements!');
+            return;
+        }
+        
+        let userEdited = false;
+        nameInput.addEventListener('input', () => { userEdited = true; });
+        
+        symbolInput.addEventListener('blur', async function() {
+            const symbol = this.value.trim();
+            console.log('Blur event, symbol:', symbol);
+            
+            if (!symbol) return;
+            
+            const market = marketSelect ? marketSelect.value : 'US';
+            console.log('Fetching for market:', market);
+            
+            try {
+                const url = `/api/company-info/${encodeURIComponent(symbol)}?market=${market}`;
+                console.log('Fetching URL:', url);
+                
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                
+                const data = await response.json();
+                console.log('Data received:', data);
+                
+                if (!userEdited && data.name) {
+                    nameInput.value = data.name;
+                    console.log('Filled name:', data.name);
+                }
+            } catch (err) {
+                console.error('Error:', err);
+            }
+        });
+        
+        console.log('Autofill initialized successfully');
+    }
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAutofill);
+    } else {
+        initAutofill();
+    }
+})();
+</script>
 {% endblock %}
