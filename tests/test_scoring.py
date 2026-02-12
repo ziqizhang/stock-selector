@@ -1,25 +1,25 @@
 import pytest
-from src.analysis.scoring import weighted_score, score_to_recommendation, CATEGORY_WEIGHTS
+from src.analysis.scoring import weighted_score, score_to_recommendation, DEFAULT_CATEGORY_WEIGHTS
 
 
-# --- CATEGORY_WEIGHTS tests ---
+# --- DEFAULT_CATEGORY_WEIGHTS tests ---
 
 def test_category_weights_has_all_expected_keys():
     expected = {
         "fundamentals", "analyst_consensus", "insider_activity",
         "technicals", "sentiment", "sector_context", "risk_assessment",
     }
-    assert set(CATEGORY_WEIGHTS.keys()) == expected
+    assert set(DEFAULT_CATEGORY_WEIGHTS.keys()) == expected
 
 
 def test_category_weights_sum_to_one():
-    assert round(sum(CATEGORY_WEIGHTS.values()), 10) == 1.0
+    assert round(sum(DEFAULT_CATEGORY_WEIGHTS.values()), 10) == 1.0
 
 
 # --- weighted_score tests ---
 
 def test_weighted_score_all_categories():
-    scores = {k: 5.0 for k in CATEGORY_WEIGHTS}
+    scores = {k: 5.0 for k in DEFAULT_CATEGORY_WEIGHTS}
     assert weighted_score(scores) == 5.0
 
 
@@ -34,15 +34,15 @@ def test_weighted_score_varied_scores():
         "risk_assessment": 5.0,
     }
     expected = sum(
-        scores[k] * CATEGORY_WEIGHTS[k] for k in scores
-    ) / sum(CATEGORY_WEIGHTS[k] for k in scores)
+        scores[k] * DEFAULT_CATEGORY_WEIGHTS[k] for k in scores
+    ) / sum(DEFAULT_CATEGORY_WEIGHTS[k] for k in scores)
     assert weighted_score(scores) == round(expected, 2)
 
 
 def test_weighted_score_subset_of_categories():
     scores = {"fundamentals": 10.0, "technicals": -10.0}
-    w_fund = CATEGORY_WEIGHTS["fundamentals"]
-    w_tech = CATEGORY_WEIGHTS["technicals"]
+    w_fund = DEFAULT_CATEGORY_WEIGHTS["fundamentals"]
+    w_tech = DEFAULT_CATEGORY_WEIGHTS["technicals"]
     expected = (10.0 * w_fund + -10.0 * w_tech) / (w_fund + w_tech)
     assert weighted_score(scores) == round(expected, 2)
 

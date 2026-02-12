@@ -7,6 +7,7 @@ This is a personal stock tracker and analysis dashboard that helps decide whethe
 - **Watchlist management** — Add and remove stock tickers with symbol, name, and sector
 - **Auto company lookup** — Enter a stock symbol and the app automatically fetches the company name and sector from Yahoo Finance (no manual entry needed!)
 - **Smart symbol resolution** — Automatically resolves symbols to correct exchange formats (e.g., `HSBC` → `HSBA.L` for UK stocks)
+- **Configurable scoring weights** — Customize the importance of each analysis category to match your investment style (Growth, Value, Income, or custom weights)
 - **7-signal analysis** — Each ticker is analyzed across seven categories, each scored from -10 (strong sell) to +10 (strong buy):
   - Fundamentals (P/E, revenue, margins, debt)
   - Analyst consensus (price targets, buy/hold/sell ratings)
@@ -88,9 +89,32 @@ You can edit the auto-filled name before submitting if needed. Then click **Add 
 
 **Examples:**
 - Enter `AAPL` → Auto-fills "Apple Inc." with sector "Technology"
-- Enter `GOOG` → Auto-fills "Alphabet Inc." with sector "Communication Services"  
+- Enter `GOOG` → Auto-fills "Alphabet Inc." with sector "Communication Services"
 - Enter `HSBC` (with UK market) → Resolves to `HSBA.L`, auto-fills "HSBC Holdings plc" with sector "Financial Services"
 - Enter `BP` (with UK market) → Resolves to `BP.L`, auto-fills "BP p.l.c." with sector "Energy"
+
+### Configure Scoring Weights
+
+Click the **Settings** link in the top navigation to customize how stock scores are calculated:
+
+**Investment Strategy Presets:**
+- **Balanced** — Default equal weighting for general investing
+- **Growth** — Prioritizes fundamentals, analyst consensus, and technical momentum
+- **Value** — Focuses on fundamentals, risk assessment, and insider confidence
+- **Income/Dividend** — Emphasizes fundamentals stability for dividend stocks
+- **Momentum** — Weights technicals and sentiment heavily for trend-following
+
+**Custom Weights:**
+Adjust the 7 category sliders to create your own scoring formula:
+- Fundamentals (default: 20%)
+- Analyst Consensus (default: 15%)
+- Insider Activity (default: 10%)
+- Technicals (default: 20%)
+- Sentiment (default: 10%)
+- Sector Context (default: 10%)
+- Risk Assessment (default: 15%)
+
+Weights must sum to 100%. Changes take effect immediately for future analyses.
 
 ### Run analysis
 

@@ -277,8 +277,12 @@ class AnalysisEngine:
         yield RefreshProgress(symbol=symbol, step="Generating overall recommendation...", category=None)
         synthesis_prompt = prompts.synthesis_prompt(symbol, signal_results)
         synthesis = await self.llm.analyze(synthesis_prompt)
+        
+        # Get configurable weights from settings
+        scoring_weights = await self.db.get_scoring_weights()
         raw_overall = synthesis.get("overall_score", weighted_score(
-            {k: v["score"] for k, v in signal_results.items()}
+            {k: v["score"] for k, v in signal_results.items()},
+            weights=scoring_weights
         ))
         overall_score = max(-10, min(10, raw_overall))
         if overall_score != raw_overall:

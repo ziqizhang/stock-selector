@@ -10,6 +10,7 @@ from pathlib import Path
 from src.db import Database
 from src.api.websocket import handle_refresh, handle_refresh_all, handle_refresh_selected
 from src.scrapers.yfinance_provider import YFinanceProvider
+from src.analysis.scoring import SCORING_PRESETS, validate_weights, normalize_weights
 
 BASE_DIR = Path(__file__).parent.parent.parent
 db = Database()
@@ -186,3 +187,82 @@ async def ws_refresh_selected(websocket: WebSocket):
         await handle_refresh_selected(websocket, db, symbols)
     except (WebSocketDisconnect, json.JSONDecodeError):
         pass
+
+
+# Settings endpoints for configurable scoring weights
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """Render the settings page with current weights and presets."""
+    current_weights = await db.get_scoring_weights()
+    active_preset = await db.get_active_preset()
+    
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "current_weights": current_weights,
+        "active_preset": active_preset,
+        "presets": SCORING_PRESETS,
+    })
+
+
+@app.get("/api/settings/weights")
+async def get_weights():
+    """Get current scoring weights."""
+    weights = await db.get_scoring_weights()
+    preset = await db.get_active_preset()
+    return {
+        "weights": weights,
+        "preset": preset,
+    }
+
+
+@app.post("/api/settings/weights")
+async def update_weights(request: Request):
+    """Update scoring weights."""
+    data = await request.json()
+    weights = data.get("weights", {})
+    
+    # Validate weights
+    is_valid, error_message = validate_weights(weights)
+    if not is_valid:
+        return {"success": False, "error": error_message}
+    
+    # Normalize weights to ensure they sum to exactly 1.0
+    normalized_weights = normalize_weights(weights)
+    
+    # Save to database
+    await db.set_scoring_weights(normalized_weights)
+    await db.set_active_preset("custom")
+    
+    return {"success": True, "weights": normalized_weights}
+
+
+@app.post("/api/settings/preset/{preset_name}")
+async def apply_preset(preset_name: str):
+    """Apply a scoring preset."""
+    if preset_name not in SCORING_PRESETS:
+        return {"success": False, "error": f"Unknown preset: {preset_name}"}
+    
+    preset = SCORING_PRESETS[preset_name]
+    await db.set_scoring_weights(preset["weights"])
+    await db.set_active_preset(preset_name)
+    
+    return {
+        "success": True,
+        "preset": preset_name,
+        "weights": preset["weights"],
+    }
+
+
+@app.get("/api/settings/presets")
+async def get_presets():
+    """Get all available scoring presets."""
+    return {
+        "presets": {
+            name: {
+                "name": data["name"],
+                "description": data["description"],
+                "weights": data["weights"],
+            }
+            for name, data in SCORING_PRESETS.items()
+        }
+    }
