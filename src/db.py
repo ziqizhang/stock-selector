@@ -174,3 +174,72 @@ class Database:
         )
         row = await cursor.fetchone()
         return row["stale"] > 0
+
+    # Settings methods for configurable scoring weights
+    async def get_setting(self, key: str) -> str | None:
+        """Get a setting value by key."""
+        cursor = await self.db.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            (key,)
+        )
+        row = await cursor.fetchone()
+        return row["value"] if row else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        """Set a setting value by key (insert or update)."""
+        await self.db.execute(
+            """INSERT INTO settings (key, value, updated_at) 
+               VALUES (?, ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET 
+               value = excluded.value, 
+               updated_at = datetime('now')""",
+            (key, value)
+        )
+        await self.db.commit()
+
+    async def get_scoring_weights(self) -> dict[str, float]:
+        """Get scoring weights from settings or return defaults."""
+        import json
+        
+        weights_json = await self.get_setting("scoring_weights")
+        if weights_json:
+            try:
+                weights = json.loads(weights_json)
+                # Validate that all required keys are present
+                default_weights = {
+                    "fundamentals": 0.20,
+                    "analyst_consensus": 0.15,
+                    "insider_activity": 0.10,
+                    "technicals": 0.20,
+                    "sentiment": 0.10,
+                    "sector_context": 0.10,
+                    "risk_assessment": 0.15,
+                }
+                # Merge with defaults to ensure all keys exist
+                return {**default_weights, **weights}
+            except json.JSONDecodeError:
+                pass
+        
+        # Return default weights if no settings or invalid JSON
+        return {
+            "fundamentals": 0.20,
+            "analyst_consensus": 0.15,
+            "insider_activity": 0.10,
+            "technicals": 0.20,
+            "sentiment": 0.10,
+            "sector_context": 0.10,
+            "risk_assessment": 0.15,
+        }
+
+    async def set_scoring_weights(self, weights: dict[str, float]) -> None:
+        """Save scoring weights to settings."""
+        import json
+        await self.set_setting("scoring_weights", json.dumps(weights))
+
+    async def get_active_preset(self) -> str | None:
+        """Get the active scoring preset name."""
+        return await self.get_setting("active_preset")
+
+    async def set_active_preset(self, preset_name: str) -> None:
+        """Set the active scoring preset name."""
+        await self.set_setting("active_preset", preset_name)

@@ -1,0 +1,274 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - Stock Selector{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">Scoring Weights Settings</h1>
+    
+    <!-- Presets Section -->
+    <div class="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 mb-6">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Investment Strategy Presets</h2>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            Choose a preset configuration that matches your investment style. You can customize weights after selecting a preset.
+        </p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for preset_key, preset in presets.items() %}
+            <button 
+                onclick="applyPreset('{{ preset_key }}')"
+                class="preset-btn p-4 border-2 rounded-lg text-left transition-all hover:border-blue-500 dark:hover:border-blue-400 {% if active_preset == preset_key %}border-blue-500 bg-blue-50 dark:bg-blue-900/20{% else %}border-slate-200 dark:border-slate-700{% endif %}"
+                data-preset="{{ preset_key }}">
+                <div class="font-semibold text-slate-900 dark:text-slate-100">{{ preset.name }}</div>
+                <div class="text-xs text-slate-600 dark:text-slate-400 mt-1">{{ preset.description }}</div>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Custom Weights Section -->
+    <div class="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Custom Weights</h2>
+            <span id="total-weight" class="text-sm font-medium px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                Total: 100%
+            </span>
+        </div>
+        
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Adjust the importance of each analysis category. Weights must sum to 100%.
+        </p>
+
+        <form id="weights-form" class="space-y-6">
+            {% for category, weight in current_weights.items() %}
+            <div class="weight-slider-group">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-medium text-slate-700 dark:text-slate-300 capitalize">
+                        {{ category.replace('_', ' ') }}
+                    </label>
+                    <span class="text-sm font-semibold text-blue-600 dark:text-blue-400 weight-value">
+                        {{ "%.0f"|format(weight * 100) }}%
+                    </span>
+                </div>
+                <input 
+                    type="range" 
+                    name="{{ category }}"
+                    value="{{ weight * 100 }}"
+                    min="0"
+                    max="50"
+                    step="1"
+                    class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    oninput="updateWeightDisplay(this)">
+            </div>
+            {% endfor %}
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <button 
+                    type="button"
+                    onclick="saveWeights()"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors">
+                    Save Weights
+                </button>
+                <button 
+                    type="button"
+                    onclick="resetToDefaults()"
+                    class="px-6 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 text-sm font-medium transition-colors">
+                    Reset to Default
+                </button>
+                <a href="/" class="px-6 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </form>
+
+        <!-- Status Messages -->
+        <div id="status-message" class="hidden mt-4 p-3 rounded-md text-sm"></div>
+    </div>
+
+    <!-- Current Configuration Info -->
+    <div class="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/60 rounded-lg p-4">
+        <h3 class="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">About Scoring Weights</h3>
+        <p class="text-sm text-blue-800 dark:text-blue-300">
+            These weights determine how much each analysis category contributes to the overall stock recommendation score. 
+            Changes take effect immediately for future analyses. Past analyses are not re-calculated.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Update weight display when slider changes
+function updateWeightDisplay(slider) {
+    const value = slider.value;
+    const display = slider.parentElement.querySelector('.weight-value');
+    display.textContent = value + '%';
+    
+    updateTotalWeight();
+}
+
+// Calculate and display total weight
+function updateTotalWeight() {
+    const sliders = document.querySelectorAll('input[type="range"]');
+    let total = 0;
+    sliders.forEach(slider => {
+        total += parseInt(slider.value);
+    });
+    
+    const totalDisplay = document.getElementById('total-weight');
+    totalDisplay.textContent = 'Total: ' + total + '%';
+    
+    // Visual feedback for valid/invalid total
+    if (total === 100) {
+        totalDisplay.className = 'text-sm font-medium px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300';
+    } else {
+        totalDisplay.className = 'text-sm font-medium px-3 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+    }
+}
+
+// Save weights to server
+async function saveWeights() {
+    const sliders = document.querySelectorAll('input[type="range"]');
+    const weights = {};
+    let total = 0;
+    
+    sliders.forEach(slider => {
+        const value = parseInt(slider.value) / 100;
+        weights[slider.name] = value;
+        total += parseInt(slider.value);
+    });
+    
+    if (total !== 100) {
+        showStatus('Weights must sum to 100%. Current total: ' + total + '%', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/settings/weights', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ weights }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showStatus('Weights saved successfully!', 'success');
+            // Update preset button styling
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20');
+                btn.classList.add('border-slate-200', 'dark:border-slate-700');
+            });
+        } else {
+            showStatus('Error: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showStatus('Failed to save weights: ' + error.message, 'error');
+    }
+}
+
+// Apply a preset
+async function applyPreset(presetName) {
+    try {
+        const response = await fetch(`/api/settings/preset/${presetName}`, {
+            method: 'POST',
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update sliders with preset values
+            for (const [category, weight] of Object.entries(result.weights)) {
+                const slider = document.querySelector(`input[name="${category}"]`);
+                if (slider) {
+                    slider.value = weight * 100;
+                    updateWeightDisplay(slider);
+                }
+            }
+            
+            // Update preset button styling
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20');
+                btn.classList.add('border-slate-200', 'dark:border-slate-700');
+            });
+            
+            const activeBtn = document.querySelector(`[data-preset="${presetName}"]`);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-slate-200', 'dark:border-slate-700');
+                activeBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20');
+            }
+            
+            showStatus(`${result.weights} preset applied successfully!`, 'success');
+        } else {
+            showStatus('Error: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showStatus('Failed to apply preset: ' + error.message, 'error');
+    }
+}
+
+// Reset to default weights
+async function resetToDefaults() {
+    try {
+        const response = await fetch('/api/settings/preset/balanced', {
+            method: 'POST',
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update sliders
+            for (const [category, weight] of Object.entries(result.weights)) {
+                const slider = document.querySelector(`input[name="${category}"]`);
+                if (slider) {
+                    slider.value = weight * 100;
+                    updateWeightDisplay(slider);
+                }
+            }
+            
+            // Update preset button styling
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20');
+                btn.classList.add('border-slate-200', 'dark:border-slate-700');
+            });
+            
+            const balancedBtn = document.querySelector('[data-preset="balanced"]');
+            if (balancedBtn) {
+                balancedBtn.classList.remove('border-slate-200', 'dark:border-slate-700');
+                balancedBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20');
+            }
+            
+            showStatus('Reset to default weights successfully!', 'success');
+        }
+    } catch (error) {
+        showStatus('Failed to reset: ' + error.message, 'error');
+    }
+}
+
+// Show status message
+function showStatus(message, type) {
+    const statusEl = document.getElementById('status-message');
+    statusEl.textContent = message;
+    statusEl.classList.remove('hidden', 'bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700');
+    
+    if (type === 'success') {
+        statusEl.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+    } else {
+        statusEl.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-300');
+    }
+    
+    // Hide after 5 seconds
+    setTimeout(() => {
+        statusEl.classList.add('hidden');
+    }, 5000);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateTotalWeight();
+});
+</script>
+{% endblock %}
