@@ -261,7 +261,7 @@ class Database:
     ) -> list[dict]:
         if symbol:
             cursor = await self.db.execute(
-                """SELECT r.*, t.name, t.market FROM recommendations r
+                """SELECT r.*, t.name, t.market, t.resolved_symbol FROM recommendations r
                    JOIN tickers t ON r.symbol = t.symbol
                    WHERE r.symbol = ?
                    ORDER BY r.created_at DESC LIMIT ?""",
@@ -269,7 +269,7 @@ class Database:
             )
         else:
             cursor = await self.db.execute(
-                """SELECT r.*, t.name, t.market FROM recommendations r
+                """SELECT r.*, t.name, t.market, t.resolved_symbol FROM recommendations r
                    JOIN tickers t ON r.symbol = t.symbol
                    ORDER BY r.created_at DESC LIMIT ?""",
                 (limit,),

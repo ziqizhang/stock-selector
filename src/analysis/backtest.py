@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.db import Database
-from src.scrapers.yfinance_provider import YFinanceProvider
+from src.scrapers.provider import DataProvider
 
 
 HORIZONS = [30, 90, 180]  # days
@@ -51,7 +51,7 @@ def _is_correct(recommendation: str, pct_change: float) -> bool:
 
 async def run_backtest(
     db: Database,
-    provider: YFinanceProvider,
+    provider: DataProvider,
     symbol: str | None = None,
 ) -> BacktestSummary:
     """Run backtest for all (or one ticker's) historical recommendations.
@@ -66,16 +66,15 @@ async def run_backtest(
     for h in HORIZONS:
         summary.hit_rates[h] = {"total": 0, "correct": 0, "rate": 0.0}
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     for rec in recs:
         price_at_rec = rec.get("price_at_rec")
         if price_at_rec is None:
             continue
 
-        rec_date = datetime.fromisoformat(rec["created_at"])
-        ticker_row = await db.get_ticker(rec["symbol"])
-        resolved = (ticker_row or {}).get("resolved_symbol") or rec["symbol"]
+        rec_date = datetime.fromisoformat(rec["created_at"]).replace(tzinfo=timezone.utc)
+        resolved = rec.get("resolved_symbol") or rec["symbol"]
 
         outcomes: dict[int, dict] = {}
 

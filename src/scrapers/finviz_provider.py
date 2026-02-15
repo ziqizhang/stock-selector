@@ -44,6 +44,10 @@ class FinvizDataProvider:
                 pass
         return None
 
+    async def get_historical_price(self, symbol: str, date: str) -> float | None:
+        """Not supported by Finviz — always returns None."""
+        return None
+
     def clear_cache(self, symbol: str | None = None):
         """Drop cached scrape results (all symbols, or just one)."""
         if symbol is None:
