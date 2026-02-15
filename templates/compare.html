@@ -14,7 +14,7 @@
                     {% if t.symbol in selected_symbols %}bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200{% else %}bg-white border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700{% endif %}">
                     <input type="checkbox" class="compare-cb hidden" value="{{ t.symbol }}"
                            {% if t.symbol in selected_symbols %}checked{% endif %}
-                           {% if t.overall_score is none %}disabled{% endif %}>
+                           {% if t.overall_score is none %}disabled data-no-data{% endif %}>
                     <span>{{ t.symbol }}</span>
                     {% if t.overall_score is none %}
                     <span class="text-xs text-gray-400 dark:text-slate-500">(no data)</span>
@@ -31,6 +31,9 @@
     </form>
     {% if selected_symbols and (selected_symbols | length < 2 or selected_symbols | length > 3) %}
     <p class="mt-2 text-sm text-red-600 dark:text-red-400">Please select 2 or 3 tickers to compare.</p>
+    {% endif %}
+    {% if truncated %}
+    <p class="mt-2 text-sm text-amber-600 dark:text-amber-400">More than 3 tickers were provided. Only the first 3 are shown.</p>
     {% endif %}
 </div>
 
@@ -137,7 +140,7 @@
         if (count < 3) {
             checkboxes.forEach(cb => {
                 // Only re-enable if it was disabled by limit, not by "no data"
-                if (cb.disabled && !cb.parentElement.querySelector('.text-gray-400, .dark\\:text-slate-500')) {
+                if (cb.disabled && !cb.dataset.noData) {
                     cb.disabled = false;
                     cb.parentElement.classList.remove('opacity-50');
                 }

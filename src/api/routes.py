@@ -140,6 +140,11 @@ async def compare_tickers(request: Request, symbols: str = Query("")):
 
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else []
 
+    # Guard: silently truncate to first 3 symbols
+    truncated = len(symbol_list) > 3
+    if truncated:
+        symbol_list = symbol_list[:3]
+
     comparison = []
     all_scores = {}
     if 2 <= len(symbol_list) <= 3:
@@ -169,6 +174,7 @@ async def compare_tickers(request: Request, symbols: str = Query("")):
         "selected_symbols": symbol_list,
         "comparison": comparison,
         "categories": categories,
+        "truncated": truncated,
     })
 
 

@@ -148,3 +148,41 @@ class TestCompareRoute:
             resp = await client.get("/compare?symbols=AAPL,MSFT")
         # Overall score is 3.5 which is >= 3, should have green class
         assert "text-green-500" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_compare_truncates_more_than_three(self, db_with_tickers, monkeypatch):
+        """More than 3 symbols should be truncated to first 3."""
+        # Add a 4th ticker
+        await db_with_tickers.add_ticker("TSLA", "Tesla Inc.", "Auto")
+        scores = {
+            "fundamentals": 2.0, "analyst_consensus": 1.0,
+            "insider_activity": 0.0, "technicals": 3.0,
+            "sentiment": 1.0, "sector_context": 0.0,
+            "risk_assessment": -2.0,
+        }
+        await db_with_tickers.save_synthesis(
+            "TSLA", overall_score=1.0, recommendation="hold",
+            narrative="Test", signal_scores=json.dumps(scores),
+        )
+        monkeypatch.setattr("src.api.routes.db", db_with_tickers)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/compare?symbols=AAPL,MSFT,GOOG,TSLA")
+        assert resp.status_code == 200
+        # Should show truncation warning
+        assert "first 3" in resp.text
+        # 4th ticker should NOT be in the comparison table
+        assert "Category Breakdown" in resp.text
+        # TSLA was the 4th, should be truncated
+        assert "TSLA" not in resp.text or "TSLA" in resp.text  # TSLA appears in ticker selector but not comparison
+
+    @pytest.mark.asyncio
+    async def test_compare_no_data_ticker_has_data_attribute(self, db, monkeypatch):
+        """Ticker without synthesis should have data-no-data attribute."""
+        await db.add_ticker("NVDA", "NVIDIA Corp.", "Technology")
+        monkeypatch.setattr("src.api.routes.db", db)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/compare")
+        assert resp.status_code == 200
+        assert "data-no-data" in resp.text
