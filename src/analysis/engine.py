@@ -11,6 +11,8 @@ from src.scrapers.openinsider import OpenInsiderScraper
 from src.scrapers.investegate import InvestegateScraper
 from src.scrapers.news import NewsScraper
 from src.scrapers.sector import SectorScraper
+from src.scrapers.newsapi import NewsAPIFetcher
+from src.scrapers.fmp_insider import FMPInsiderFetcher
 from src.analysis.llm_base import LLMProvider
 from src.analysis.claude import ClaudeCLI
 from src.analysis.codex import CodexCLI
@@ -86,6 +88,8 @@ class AnalysisEngine:
         self.investegate = InvestegateScraper(cache_get=cache_get, cache_save=cache_save)
         self.news = NewsScraper(cache_get=cache_get, cache_save=cache_save)
         self.sector = SectorScraper(cache_get=cache_get, cache_save=cache_save)
+        self.newsapi = NewsAPIFetcher()
+        self.fmp_insider = FMPInsiderFetcher()
 
     async def analyze_ticker(self, symbol: str) -> AsyncGenerator[RefreshProgress, None]:
         """Run full analysis for a ticker, yielding progress updates."""
@@ -130,28 +134,44 @@ class AnalysisEngine:
         }
         all_scraped["primary"] = finviz_data
 
-        # 2. Scrape insider activity (market-dependent)
-        yield RefreshProgress(symbol=symbol, step="Scraping insider data...", category="insider_activity")
-        try:
-            if market == "UK":
-                insider_data = await self.investegate.scrape(symbol)
-            else:
-                insider_data = await self.openinsider.scrape(symbol)
-            all_scraped["openinsider"] = insider_data
-        except Exception as e:
-            logger.error(f"Insider scrape failed for {symbol}: {e}")
-            insider_data = {"insider_trades": []}
-            all_scraped["openinsider"] = insider_data
+        # 2. Fetch insider activity (API with scraper fallback, market-dependent)
+        yield RefreshProgress(symbol=symbol, step="Fetching insider data...", category="insider_activity")
+        insider_data = None
+        if self.fmp_insider.available:
+            try:
+                insider_data = await self.fmp_insider.fetch_insider_trades(symbol)
+                logger.info("Insider data for %s fetched via FMP API", symbol)
+            except Exception as e:
+                logger.warning("FMP insider API failed for %s: %s — falling back to scraper", symbol, e)
+        if insider_data is None:
+            try:
+                if market == "UK":
+                    insider_data = await self.investegate.scrape(symbol)
+                else:
+                    insider_data = await self.openinsider.scrape(symbol)
+                logger.info("Insider data for %s fetched via scraper fallback", symbol)
+            except Exception as e:
+                logger.error(f"Insider scrape failed for {symbol}: {e}")
+                insider_data = {"insider_trades": []}
+        all_scraped["openinsider"] = insider_data
 
-        # 3. Scrape news
-        yield RefreshProgress(symbol=symbol, step="Scraping news...", category="sentiment")
-        try:
-            news_data = await self.news.scrape(symbol)
-            all_scraped["news"] = news_data
-        except Exception as e:
-            logger.error(f"News scrape failed for {symbol}: {e}")
-            news_data = {"news_articles": []}
-            all_scraped["news"] = news_data
+        # 3. Fetch news (API with scraper fallback)
+        yield RefreshProgress(symbol=symbol, step="Fetching news...", category="sentiment")
+        news_data = None
+        if self.newsapi.available:
+            try:
+                news_data = await self.newsapi.fetch_news(symbol)
+                logger.info("News for %s fetched via NewsAPI", symbol)
+            except Exception as e:
+                logger.warning("NewsAPI failed for %s: %s — falling back to scraper", symbol, e)
+        if news_data is None:
+            try:
+                news_data = await self.news.scrape(symbol)
+                logger.info("News for %s fetched via scraper fallback", symbol)
+            except Exception as e:
+                logger.error(f"News scrape failed for {symbol}: {e}")
+                news_data = {"news_articles": []}
+        all_scraped["news"] = news_data
 
         # 4. Scrape sector context
         yield RefreshProgress(symbol=symbol, step="Scraping sector data...", category="sector_context")
@@ -313,3 +333,5 @@ class AnalysisEngine:
         await self.investegate.close()
         await self.news.close()
         await self.sector.close()
+        await self.newsapi.close()
+        await self.fmp_insider.close()

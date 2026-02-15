@@ -61,7 +61,7 @@ def _mock_provider():
 
 
 def _mock_scrapers(engine):
-    """Replace real scrapers with mocks."""
+    """Replace real scrapers and API fetchers with mocks."""
     engine.openinsider = AsyncMock()
     engine.openinsider.scrape = AsyncMock(return_value={"insider_trades": []})
     engine.openinsider.close = AsyncMock()
@@ -77,6 +77,15 @@ def _mock_scrapers(engine):
     engine.sector = AsyncMock()
     engine.sector.scrape = AsyncMock(return_value={"sector_performance": []})
     engine.sector.close = AsyncMock()
+
+    # API fetchers — disabled by default (no API key), so scrapers are used
+    engine.newsapi = AsyncMock()
+    engine.newsapi.available = False
+    engine.newsapi.close = AsyncMock()
+
+    engine.fmp_insider = AsyncMock()
+    engine.fmp_insider.available = False
+    engine.fmp_insider.close = AsyncMock()
 
 
 @pytest_asyncio.fixture
@@ -228,8 +237,8 @@ async def test_progress_events_cover_all_steps(db, engine):
 
     steps = [e.step for e in events]
     assert "Fetching market data..." in steps
-    assert "Scraping insider data..." in steps
-    assert "Scraping news..." in steps
+    assert "Fetching insider data..." in steps
+    assert "Fetching news..." in steps
     assert "Scraping sector data..." in steps
     assert "Generating overall recommendation..." in steps
     assert "Complete" in steps
