@@ -342,6 +342,23 @@ class YFinanceProvider:
             })
         return items
 
+    async def get_current_price(self, symbol: str) -> float | None:
+        data = self._ensure_cached(symbol)
+        info = data["info"]
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        return float(price) if price is not None else None
+
+    async def get_historical_price(self, symbol: str, date: str) -> float | None:
+        """Get closing price on or near a specific date (YYYY-MM-DD)."""
+        try:
+            ticker = self._get_ticker(symbol)
+            hist = ticker.history(start=date, period="5d")
+            if hist.empty or "Close" not in hist.columns:
+                return None
+            return float(hist["Close"].iloc[0])
+        except Exception:
+            return None
+
     def clear_cache(self, symbol: str | None = None) -> None:
         if symbol is None:
             self._cache.clear()

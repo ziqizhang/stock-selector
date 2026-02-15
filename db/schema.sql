@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS scrape_cache (
     expires_at DATETIME NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL REFERENCES tickers(symbol) ON DELETE CASCADE,
+    recommendation TEXT NOT NULL,
+    overall_score REAL NOT NULL,
+    price_at_rec REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_analyses_symbol ON analyses(symbol);
 CREATE INDEX IF NOT EXISTS idx_syntheses_symbol ON syntheses(symbol);
 CREATE INDEX IF NOT EXISTS idx_scrape_cache_url ON scrape_cache(url);
+CREATE INDEX IF NOT EXISTS idx_recommendations_symbol ON recommendations(symbol);
+CREATE INDEX IF NOT EXISTS idx_recommendations_created_at ON recommendations(created_at);

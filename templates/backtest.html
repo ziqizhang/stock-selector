@@ -1,0 +1,104 @@
+{% extends "layout.html" %}
+
+{% block title %}Backtest — Stock Selector{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Backtest Results</h1>
+        <form method="get" action="/backtest" class="flex items-center gap-2">
+            <select name="symbol" class="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm">
+                <option value="">All Tickers</option>
+                {% for t in tickers %}
+                <option value="{{ t.symbol }}" {% if selected_symbol == t.symbol %}selected{% endif %}>
+                    {{ t.symbol }} — {{ t.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit"
+                    class="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition">
+                Filter
+            </button>
+        </form>
+    </div>
+
+    {% if summary.total == 0 %}
+    <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center">
+        <p class="text-slate-500 dark:text-slate-400">
+            No recommendations with price data found. Run an analysis first, then check back after some time has passed.
+        </p>
+    </div>
+    {% else %}
+
+    <!-- Hit Rate Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {% for h in horizons %}
+        {% set bucket = summary.hit_rates[h] %}
+        <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
+            <h3 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">{{ h }}-Day Hit Rate</h3>
+            {% if bucket.total > 0 %}
+            <p class="text-3xl font-bold {% if bucket.rate >= 60 %}text-green-600 dark:text-green-400{% elif bucket.rate >= 40 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                {{ bucket.rate }}%
+            </p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">{{ bucket.correct }} / {{ bucket.total }} correct</p>
+            {% else %}
+            <p class="text-3xl font-bold text-slate-300 dark:text-slate-600">--</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Not enough data yet</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Results Table -->
+    <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
+        <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead class="bg-slate-50 dark:bg-slate-800">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Symbol</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Date</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Signal</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Score</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Price @ Rec</th>
+                    {% for h in horizons %}
+                    <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ h }}d</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                {% for r in summary.results %}
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td class="px-4 py-3 text-sm font-medium">
+                        <a href="/ticker/{{ r.symbol }}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ r.symbol }}</a>
+                        <span class="text-xs text-slate-400 dark:text-slate-500 block">{{ r.name }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{{ r.created_at[:10] }}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if r.recommendation == 'buy' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400
+                            {% elif r.recommendation == 'sell' %}bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400
+                            {% else %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400{% endif %}">
+                            {{ r.recommendation|upper }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-right">{{ "%.1f"|format(r.overall_score) }}</td>
+                    <td class="px-4 py-3 text-sm text-right">${{ "%.2f"|format(r.price_at_rec) if r.price_at_rec else '--' }}</td>
+                    {% for h in horizons %}
+                    <td class="px-4 py-3 text-sm text-right">
+                        {% if h in r.outcomes %}
+                            {% set o = r.outcomes[h] %}
+                            <span class="{% if o.correct %}text-green-600 dark:text-green-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                                {{ "%+.1f"|format(o.pct_change) }}%
+                            </span>
+                        {% else %}
+                            <span class="text-slate-300 dark:text-slate-600">--</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -11,6 +11,7 @@ from src.db import Database
 from src.api.websocket import handle_refresh, handle_refresh_all, handle_refresh_selected
 from src.scrapers.yfinance_provider import YFinanceProvider
 from src.analysis.scoring import SCORING_PRESETS, validate_weights, normalize_weights
+from src.analysis.backtest import run_backtest, HORIZONS
 
 BASE_DIR = Path(__file__).parent.parent.parent
 db = Database()
@@ -266,3 +267,23 @@ async def get_presets():
             for name, data in SCORING_PRESETS.items()
         }
     }
+
+
+@app.get("/backtest", response_class=HTMLResponse)
+async def backtest_page(request: Request, symbol: str | None = None):
+    """Display backtest results comparing past recommendations to actual price movement."""
+    provider = YFinanceProvider()
+    try:
+        summary = await run_backtest(db, provider, symbol=symbol)
+    finally:
+        await provider.close()
+
+    tickers = await db.list_tickers()
+
+    return templates.TemplateResponse("backtest.html", {
+        "request": request,
+        "summary": summary,
+        "horizons": HORIZONS,
+        "selected_symbol": symbol,
+        "tickers": tickers,
+    })

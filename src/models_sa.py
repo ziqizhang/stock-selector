@@ -76,6 +76,24 @@ scrape_cache = Table(
     Column("expires_at", DateTime, nullable=False),
 )
 
+recommendations = Table(
+    "recommendations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "symbol",
+        Text,
+        ForeignKey("tickers.symbol", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("recommendation", Text, nullable=False),
+    Column("overall_score", REAL, nullable=False),
+    Column("price_at_rec", REAL),
+    Column("created_at", DateTime, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 Index("idx_analyses_symbol", analyses.c.symbol)
 Index("idx_syntheses_symbol", syntheses.c.symbol)
 Index("idx_scrape_cache_url", scrape_cache.c.url)
+Index("idx_recommendations_symbol", recommendations.c.symbol)
+Index("idx_recommendations_created_at", recommendations.c.created_at)

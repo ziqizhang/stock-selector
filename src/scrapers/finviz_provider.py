@@ -33,6 +33,17 @@ class FinvizDataProvider:
         data = await self._scrape_once(symbol)
         return data.get("news", [])
 
+    async def get_current_price(self, symbol: str) -> float | None:
+        data = await self._scrape_once(symbol)
+        technicals = data.get("technicals", {})
+        price_str = technicals.get("Price")
+        if price_str:
+            try:
+                return float(price_str)
+            except (ValueError, TypeError):
+                pass
+        return None
+
     def clear_cache(self, symbol: str | None = None):
         """Drop cached scrape results (all symbols, or just one)."""
         if symbol is None:
