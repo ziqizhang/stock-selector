@@ -2,7 +2,7 @@ import json
 import markdown
 from contextlib import asynccontextmanager
 from markupsafe import Markup
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, Form
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -130,6 +130,52 @@ async def get_company_info(symbol: str, market: str = "US"):
             "industry": None,
             "error": str(e),
         }
+
+
+@app.get("/compare", response_class=HTMLResponse)
+async def compare_tickers(request: Request, symbols: str = Query("")):
+    """Compare 2-3 tickers side-by-side."""
+    # Get all tickers for the selector
+    all_tickers = await db.get_dashboard_data()
+
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else []
+
+    # Guard: silently truncate to first 3 symbols
+    truncated = len(symbol_list) > 3
+    if truncated:
+        symbol_list = symbol_list[:3]
+
+    comparison = []
+    all_scores = {}
+    if 2 <= len(symbol_list) <= 3:
+        rows = await db.get_comparison_data(symbol_list)
+        for row in rows:
+            scores = {}
+            if row.get("signal_scores"):
+                scores = json.loads(row["signal_scores"])
+            comparison.append({**row, "parsed_scores": scores})
+            all_scores[row["symbol"]] = scores
+
+    # Collect all category keys across tickers
+    categories = []
+    if all_scores:
+        cat_set = set()
+        for scores in all_scores.values():
+            cat_set.update(scores.keys())
+        # Use a stable order from the first ticker, then any extras
+        first_scores = next(iter(all_scores.values()))
+        categories = list(first_scores.keys())
+        for c in sorted(cat_set - set(categories)):
+            categories.append(c)
+
+    return templates.TemplateResponse("compare.html", {
+        "request": request,
+        "all_tickers": all_tickers,
+        "selected_symbols": symbol_list,
+        "comparison": comparison,
+        "categories": categories,
+        "truncated": truncated,
+    })
 
 
 @app.get("/ticker/{symbol}", response_class=HTMLResponse)
