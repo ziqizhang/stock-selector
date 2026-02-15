@@ -23,8 +23,9 @@ class NewsAPIFetcher:
 
     async def fetch_news(self, symbol: str) -> dict:
         """Fetch news for a stock symbol. Returns same shape as NewsScraper.scrape()."""
+        query_symbol = symbol.rstrip(".L") if symbol.endswith(".L") else symbol
         params = {
-            "q": f"{symbol} stock",
+            "q": f"{query_symbol} stock",
             "apiKey": self._api_key,
             "language": "en",
             "sortBy": "publishedAt",

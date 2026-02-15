@@ -52,14 +52,23 @@ class FMPInsiderFetcher:
                 "qty": str(item.get("securitiesTransacted", "")),
                 "owned": str(item.get("securitiesOwned", "")),
                 "change_pct": "",
-                "value": str(round(
-                    float(item.get("price", 0)) * float(item.get("securitiesTransacted", 0))
-                )) if item.get("price") and item.get("securitiesTransacted") else "",
+                "value": _calc_value(item),
             })
         return {"insider_trades": trades}
 
     async def close(self):
         await self._client.aclose()
+
+
+def _calc_value(item: dict) -> str:
+    """Calculate trade value from price * quantity, tolerating bad data."""
+    if not item.get("price") or not item.get("securitiesTransacted"):
+        return ""
+    try:
+        value = str(round(float(item.get("price", 0)) * float(item.get("securitiesTransacted", 0))))
+    except (ValueError, TypeError):
+        value = ""
+    return value
 
 
 def _map_transaction_type(fmp_type: str) -> str:
