@@ -165,6 +165,26 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+    async def get_comparison_data(self, symbols: list[str]) -> list[dict]:
+        """Get latest synthesis + ticker info for multiple symbols."""
+        if not symbols:
+            return []
+        placeholders = ",".join("?" for _ in symbols)
+        upper_symbols = [s.upper() for s in symbols]
+        cursor = await self.db.execute(
+            f"""SELECT t.symbol, t.name, t.sector, t.market,
+                       s.overall_score, s.recommendation, s.signal_scores,
+                       s.created_at as last_refreshed
+                FROM tickers t
+                LEFT JOIN syntheses s ON t.symbol = s.symbol
+                  AND s.id = (SELECT MAX(id) FROM syntheses WHERE symbol = t.symbol)
+                WHERE t.symbol IN ({placeholders})
+                ORDER BY t.symbol""",
+            upper_symbols,
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
     async def get_staleness(self) -> bool:
         cursor = await self.db.execute(
             """SELECT COUNT(*) as stale FROM tickers t
