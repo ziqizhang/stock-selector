@@ -243,3 +243,36 @@ class Database:
     async def set_active_preset(self, preset_name: str) -> None:
         """Set the active scoring preset name."""
         await self.set_setting("active_preset", preset_name)
+
+    # Recommendation tracking methods for backtesting
+    async def save_recommendation(
+        self, symbol: str, recommendation: str, overall_score: float,
+        price_at_rec: float | None = None,
+    ):
+        await self.db.execute(
+            """INSERT INTO recommendations (symbol, recommendation, overall_score, price_at_rec)
+               VALUES (?, ?, ?, ?)""",
+            (symbol.upper(), recommendation, overall_score, price_at_rec),
+        )
+        await self.db.commit()
+
+    async def get_recommendations(
+        self, symbol: str | None = None, limit: int = 100,
+    ) -> list[dict]:
+        if symbol:
+            cursor = await self.db.execute(
+                """SELECT r.*, t.name, t.market, t.resolved_symbol FROM recommendations r
+                   JOIN tickers t ON r.symbol = t.symbol
+                   WHERE r.symbol = ?
+                   ORDER BY r.created_at DESC LIMIT ?""",
+                (symbol.upper(), limit),
+            )
+        else:
+            cursor = await self.db.execute(
+                """SELECT r.*, t.name, t.market, t.resolved_symbol FROM recommendations r
+                   JOIN tickers t ON r.symbol = t.symbol
+                   ORDER BY r.created_at DESC LIMIT ?""",
+                (limit,),
+            )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]

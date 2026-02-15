@@ -56,6 +56,7 @@ def _mock_provider():
     provider.get_technicals = AsyncMock(return_value={"rsi": 55})
     provider.get_analyst_data = AsyncMock(return_value={"target": 150})
     provider.get_news = AsyncMock(return_value=[{"title": "News"}])
+    provider.get_current_price = AsyncMock(return_value=150.0)
     provider.close = AsyncMock()
     return provider
 

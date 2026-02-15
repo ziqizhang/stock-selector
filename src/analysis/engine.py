@@ -305,6 +305,18 @@ class AnalysisEngine:
             signal_scores=json.dumps({k: v["score"] for k, v in signal_results.items()}),
         )
 
+        # Record recommendation for backtest tracking
+        try:
+            current_price = await self.data_provider.get_current_price(resolved)
+        except Exception:
+            current_price = None
+        await self.db.save_recommendation(
+            symbol=symbol,
+            recommendation=recommendation,
+            overall_score=overall_score,
+            price_at_rec=current_price,
+        )
+
         yield RefreshProgress(symbol=symbol, step="Complete", done=True)
 
     async def close(self):
